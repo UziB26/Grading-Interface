@@ -12,10 +12,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from grading_app.ast_checks import analyze_python_file
 from grading_app.code_checks import analyze_file_with_manifest
 from grading_app.config import ROOT, get_manifest
-from grading_app.manifest import QuestionSpec
+from grading_app.manifest import QuestionSpec, marking_mode_for_file
+from grading_app.semantic_code import grade_semantic_code
 
 
 @dataclass
@@ -26,7 +26,10 @@ class GradeResult:
     benchmark_file: str
     submitted_file: str
     status: str
+    marking_mode: str
     similarity: float
+    correctness_score: float | None
+    practice_score: float | None
     mark: float
     max_mark: float
     notes: str
@@ -52,6 +55,8 @@ class StudentSummary:
     questions_graded: int
     questions_missing: int
     missing_files: str
+    avg_correctness: float | None
+    avg_practice: float | None
     code_structure_avg: float | None
 
 
@@ -104,7 +109,7 @@ def read_csv_frame(path: Path) -> pd.DataFrame:
     return pd.read_csv(path, dtype=str, keep_default_na=False)
 
 
-def numeric_series_similarity(left: pd.Series, right: pd.Series) -> float:
+def numeric_series_similarity(left: pd.Series, right: pd.Series, tolerance_pct: float = 1.0) -> float:
     left_num = pd.to_numeric(left, errors="coerce")
     right_num = pd.to_numeric(right, errors="coerce")
     if left_num.notna().sum() == 0 and right_num.notna().sum() == 0:
@@ -118,12 +123,12 @@ def numeric_series_similarity(left: pd.Series, right: pd.Series) -> float:
     if not mask.any():
         return 0.0
     deltas = (left_num[mask] - right_num[mask]).abs()
-    tolerances = right_num[mask].abs().clip(lower=1.0) * 0.01
+    tolerances = right_num[mask].abs().clip(lower=1.0) * (tolerance_pct / 100.0)
     matches = (deltas <= tolerances).mean()
     return float(matches)
 
 
-def csv_similarity(a: Path, b: Path) -> tuple[float, str]:
+def csv_similarity(a: Path, b: Path, tolerance_pct: float = 1.0, ignore_row_order: bool = True) -> tuple[float, str]:
     try:
         left = read_csv_frame(a)
         right = read_csv_frame(b)
@@ -148,15 +153,16 @@ def csv_similarity(a: Path, b: Path) -> tuple[float, str]:
         empty_score = 1.0 if left.empty and right.empty else 0.0
         return empty_score * column_score, "; ".join(notes) or "Empty CSV comparison"
 
-    left = left.sort_values(by=list(left.columns)).reset_index(drop=True)
-    right = right.sort_values(by=list(right.columns)).reset_index(drop=True)
+    if ignore_row_order:
+        left = left.sort_values(by=list(left.columns)).reset_index(drop=True)
+        right = right.sort_values(by=list(right.columns)).reset_index(drop=True)
     row_count_score = min(len(left), len(right)) / max(len(left), len(right))
     compare_rows = min(len(left), len(right))
     if compare_rows == 0:
         return 0.0, "; ".join(notes) or "No rows to compare"
 
     column_scores = [
-        numeric_series_similarity(left.iloc[:compare_rows, idx], right.iloc[:compare_rows, idx])
+        numeric_series_similarity(left.iloc[:compare_rows, idx], right.iloc[:compare_rows, idx], tolerance_pct)
         for idx, col in enumerate(left.columns)
     ]
     value_score = sum(column_scores) / len(column_scores)
@@ -166,7 +172,13 @@ def csv_similarity(a: Path, b: Path) -> tuple[float, str]:
     return score, "; ".join(notes) or "CSV values compared"
 
 
-def compare_files(benchmark: Path, submitted: Path, mode: str) -> tuple[float, str]:
+def compare_files(
+    benchmark: Path,
+    submitted: Path,
+    mode: str,
+    tolerance_pct: float = 1.0,
+    ignore_row_order: bool = True,
+) -> tuple[float, str]:
     if not benchmark.exists():
         raise FileNotFoundError(f"Benchmark not found: {benchmark}")
     if not submitted.exists():
@@ -175,7 +187,7 @@ def compare_files(benchmark: Path, submitted: Path, mode: str) -> tuple[float, s
     try:
         suffix = benchmark.suffix.lower()
         if mode == "csv" or suffix == ".csv":
-            return csv_similarity(benchmark, submitted)
+            return csv_similarity(benchmark, submitted, tolerance_pct, ignore_row_order)
         if mode == "xml" or suffix == ".xml":
             return xml_similarity(benchmark, submitted), "XML structure compared"
         if mode == "code" and suffix in {".sql", ".xsl", ".xslt"}:
@@ -218,22 +230,6 @@ def find_submission_file(student_dir: Path, benchmark_name: str, aliases_map: di
     if partial:
         return partial[0]
     return None
-
-
-def analyze_python_files(student_dir: Path, manifest) -> tuple[bool, str]:
-    python_files = list(student_dir.rglob("*.py"))
-    if not python_files:
-        return False, "No Python files found"
-    spec = manifest.code_check_for_suffix(".py")
-    rules = spec.rules if spec else ()
-    invalid = []
-    for path in python_files:
-        syntax_ok, _, _, _, details = analyze_python_file(path, rules)
-        if not syntax_ok:
-            invalid.append(f"{path.name}: {details}")
-    if invalid:
-        return False, "; ".join(invalid[:3])
-    return True, f"{len(python_files)} Python file(s) parsed with AST"
 
 
 def check_student_code(student_dir: Path) -> list[CodeCheckResult]:
@@ -293,20 +289,129 @@ def seed_benchmarks() -> list[str]:
     return created
 
 
+def grade_file_item(
+    student_dir: Path,
+    question: QuestionSpec,
+    benchmark_name: str,
+    benchmark: Path,
+    submitted: Path,
+    max_mark: float,
+    manifest,
+    project_root: Path,
+) -> GradeResult:
+    marking_mode = marking_mode_for_file(question, benchmark_name)
+    base = {
+        "student": student_dir.name,
+        "question": question.question_id,
+        "question_label": question.label,
+        "benchmark_file": str(benchmark.resolve().relative_to(project_root)),
+        "submitted_file": str(submitted.resolve().relative_to(project_root)),
+        "max_mark": max_mark,
+        "marking_mode": marking_mode,
+    }
+
+    if marking_mode == "semantic_code":
+        try:
+            semantic = grade_semantic_code(submitted, question, manifest, benchmark)
+            notes = f"{semantic.correctness_details}; {semantic.practice_details}"
+            return GradeResult(
+                **base,
+                status="graded",
+                similarity=semantic.combined,
+                correctness_score=semantic.correctness,
+                practice_score=semantic.practice,
+                mark=round(semantic.combined * max_mark, 2),
+                notes=notes,
+            )
+        except Exception as exc:
+            return GradeResult(
+                **base,
+                status="error",
+                similarity=0.0,
+                correctness_score=0.0,
+                practice_score=0.0,
+                mark=0.0,
+                notes=f"Semantic grading failed: {exc}",
+            )
+
+    if marking_mode == "text_rubric":
+        return GradeResult(
+            **base,
+            status="graded",
+            similarity=0.0,
+            correctness_score=None,
+            practice_score=None,
+            mark=0.0,
+            notes="Rubric text grading not yet implemented; configure legacy_text or add rubric_file",
+        )
+
+    mode = compare_mode_for_file(question, benchmark_name)
+    rules = question.match_rules
+    try:
+        score, compare_note = compare_files(
+            benchmark,
+            submitted,
+            mode,
+            tolerance_pct=rules.numeric_tolerance_pct,
+            ignore_row_order=rules.ignore_row_order,
+        )
+        status = "graded"
+        mode_label = "Output values compared" if marking_mode == "output_match" else compare_note
+        notes = mode_label if marking_mode == "output_match" else compare_note
+        if marking_mode == "output_match" and compare_note:
+            notes = f"{mode_label}; {compare_note}"
+        return GradeResult(
+            **base,
+            status=status,
+            similarity=round(score, 4),
+            correctness_score=round(score, 4),
+            practice_score=None,
+            mark=round(score * max_mark, 2),
+            notes=notes,
+        )
+    except FileNotFoundError as exc:
+        return GradeResult(
+            **base,
+            status="missing",
+            similarity=0.0,
+            correctness_score=0.0,
+            practice_score=None,
+            mark=0.0,
+            notes=f"Missing: {benchmark_name} ({exc})",
+        )
+    except Exception as exc:
+        return GradeResult(
+            **base,
+            status="error",
+            similarity=0.0,
+            correctness_score=0.0,
+            practice_score=None,
+            mark=0.0,
+            notes=f"Comparison failed: {exc}",
+        )
+
+
 def grade_student(student_dir: Path, mark_scale: float = 1.0) -> list[GradeResult]:
     results: list[GradeResult] = []
     student_dir = student_dir.resolve()
     project_root = ROOT.resolve()
     manifest = get_manifest()
     aliases_map = manifest.submission_aliases
-    python_ok, python_note = analyze_python_files(student_dir, manifest)
 
     for question in manifest.questions:
         question_dir = manifest.benchmark_dir / question.question_id
         if not question_dir.exists():
             continue
         max_mark = round(question.max_mark * mark_scale, 2)
-        for benchmark_name in question.benchmark_files:
+        file_count = len(question.benchmark_files)
+        per_file_max = round(max_mark / file_count, 2) if file_count else max_mark
+        # Keep per-question total exact when split across files (e.g. 25 / 2 = 12.5 + 12.5).
+        per_file_marks = [per_file_max] * file_count
+        remainder = round(max_mark - sum(per_file_marks), 2)
+        if per_file_marks and remainder:
+            per_file_marks[-1] = round(per_file_marks[-1] + remainder, 2)
+        for file_index, benchmark_name in enumerate(question.benchmark_files):
+            file_max_mark = per_file_marks[file_index]
             benchmark = question_dir / benchmark_name
             if not benchmark.exists():
                 continue
@@ -320,9 +425,12 @@ def grade_student(student_dir: Path, mark_scale: float = 1.0) -> list[GradeResul
                         benchmark_file=str(benchmark.resolve().relative_to(project_root)),
                         submitted_file="",
                         status="missing",
+                        marking_mode=marking_mode_for_file(question, benchmark_name),
                         similarity=0.0,
+                        correctness_score=0.0,
+                        practice_score=None,
                         mark=0.0,
-                        max_mark=max_mark,
+                        max_mark=file_max_mark,
                         notes=f"Missing: {benchmark_name}",
                     )
                 )
@@ -337,45 +445,27 @@ def grade_student(student_dir: Path, mark_scale: float = 1.0) -> list[GradeResul
                         benchmark_file=str(benchmark.resolve().relative_to(project_root)),
                         submitted_file=str(submitted.resolve().relative_to(project_root)),
                         status="missing",
+                        marking_mode=marking_mode_for_file(question, benchmark_name),
                         similarity=0.0,
+                        correctness_score=0.0,
+                        practice_score=None,
                         mark=0.0,
-                        max_mark=max_mark,
+                        max_mark=file_max_mark,
                         notes=f"Missing: {benchmark_name}",
                     )
                 )
                 continue
 
-            mode = compare_mode_for_file(question, benchmark_name)
-            try:
-                score, compare_note = compare_files(benchmark, submitted, mode)
-                status = "graded"
-                notes = compare_note
-            except FileNotFoundError as exc:
-                score = 0.0
-                status = "missing"
-                notes = f"Missing: {benchmark_name} ({exc})"
-            except Exception as exc:
-                score = 0.0
-                status = "error"
-                notes = f"Comparison failed: {exc}"
-
-            mark = round(score * max_mark, 2)
-            if status == "graded" and (benchmark.suffix.lower() == ".py" or submitted.suffix.lower() == ".py"):
-                notes = f"{notes}; {python_note}"
-                if not python_ok:
-                    mark = min(mark, max_mark * 0.5)
             results.append(
-                GradeResult(
-                    student=student_dir.name,
-                    question=question.question_id,
-                    question_label=question.label,
-                    benchmark_file=str(benchmark.resolve().relative_to(project_root)),
-                    submitted_file=str(submitted.resolve().relative_to(project_root)),
-                    status=status,
-                    similarity=round(score, 4),
-                    mark=mark,
-                    max_mark=max_mark,
-                    notes=notes,
+                grade_file_item(
+                    student_dir,
+                    question,
+                    benchmark_name,
+                    benchmark,
+                    submitted,
+                    file_max_mark,
+                    manifest,
+                    project_root,
                 )
             )
     return results
@@ -404,6 +494,24 @@ def build_student_summaries(
             if student_code
             else None
         )
+        correctness_scores = [
+            result.correctness_score
+            for result in student_results
+            if result.correctness_score is not None
+        ]
+        practice_scores = [
+            result.practice_score
+            for result in student_results
+            if result.practice_score is not None
+        ]
+        avg_correctness = (
+            round(sum(correctness_scores) / len(correctness_scores), 4)
+            if correctness_scores
+            else None
+        )
+        avg_practice = (
+            round(sum(practice_scores) / len(practice_scores), 4) if practice_scores else None
+        )
         summaries.append(
             StudentSummary(
                 student=student,
@@ -413,6 +521,8 @@ def build_student_summaries(
                 questions_graded=len(student_results),
                 questions_missing=missing,
                 missing_files=missing_files,
+                avg_correctness=avg_correctness,
+                avg_practice=avg_practice,
                 code_structure_avg=code_avg,
             )
         )

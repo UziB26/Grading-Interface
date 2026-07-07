@@ -1,7 +1,7 @@
 {
   "assignment_id": "technical_assignment_2024",
   "title": "Technical Assignment 2024",
-  "version": "1.0",
+  "version": "1.1",
   "benchmark_dir": "benchmark_files",
   "submissions_dir": "student_submissions",
   "reports_dir": "outputs/grading_reports",
@@ -22,6 +22,7 @@
       "id": "q1",
       "label": "Question 1 - Data preparation notes",
       "max_mark": 5,
+      "marking_mode": "legacy_text",
       "compare_mode": "text",
       "files": [
         {
@@ -34,7 +35,12 @@
       "id": "q2",
       "label": "Question 2 - Contract summary",
       "max_mark": 10,
+      "marking_mode": "output_match",
       "compare_mode": "csv",
+      "match_rules": {
+        "numeric_tolerance_pct": 1.0,
+        "ignore_row_order": true
+      },
       "files": [
         {
           "benchmark": "q2_contract_summary.csv",
@@ -46,7 +52,12 @@
       "id": "q3",
       "label": "Question 3 - Task statistics",
       "max_mark": 15,
+      "marking_mode": "output_match",
       "compare_mode": "csv",
+      "match_rules": {
+        "numeric_tolerance_pct": 1.0,
+        "ignore_row_order": true
+      },
       "files": [
         {
           "benchmark": "q3_task_statistics.csv",
@@ -58,7 +69,12 @@
       "id": "q4",
       "label": "Question 4 - Waiting entries",
       "max_mark": 10,
+      "marking_mode": "output_match",
       "compare_mode": "csv",
+      "match_rules": {
+        "numeric_tolerance_pct": 1.0,
+        "ignore_row_order": true
+      },
       "files": [
         {
           "benchmark": "q4_waiting_entries_by_task.csv",
@@ -70,7 +86,12 @@
       "id": "q5",
       "label": "Question 5 - Top processing times",
       "max_mark": 10,
+      "marking_mode": "output_match",
       "compare_mode": "csv",
+      "match_rules": {
+        "numeric_tolerance_pct": 1.0,
+        "ignore_row_order": true
+      },
       "files": [
         {
           "benchmark": "q5_top5_processing_time_last_week.csv",
@@ -82,7 +103,12 @@
       "id": "q6",
       "label": "Question 6 - Contract paths",
       "max_mark": 10,
+      "marking_mode": "output_match",
       "compare_mode": "csv",
+      "match_rules": {
+        "numeric_tolerance_pct": 1.0,
+        "ignore_row_order": true
+      },
       "files": [
         {
           "benchmark": "contractPaths_output.csv",
@@ -94,6 +120,7 @@
       "id": "q7",
       "label": "Question 7 - Data analysis report",
       "max_mark": 15,
+      "marking_mode": "legacy_text",
       "compare_mode": "text",
       "files": [
         {
@@ -106,7 +133,18 @@
       "id": "q8",
       "label": "Question 8 - SQL queries",
       "max_mark": 10,
+      "marking_mode": "semantic_code",
       "compare_mode": "code",
+      "code_marking": {
+        "weights": { "correctness": 0.7, "practice": 0.3 },
+        "correctness": {
+          "method": "behavior_rules",
+          "rules_from_code_checks": true
+        },
+        "practice": {
+          "checks": ["comments", "no_select_star", "uses_aliases", "reasonable_length"]
+        }
+      },
       "files": [
         {
           "benchmark": "workflow_queries.sql",
@@ -118,7 +156,18 @@
       "id": "q9",
       "label": "Question 9 - XML/XSLT transform",
       "max_mark": 15,
+      "marking_mode": "mixed",
       "compare_mode": "mixed",
+      "code_marking": {
+        "weights": { "correctness": 0.7, "practice": 0.3 },
+        "correctness": {
+          "method": "behavior_rules",
+          "rules_from_code_checks": true
+        },
+        "practice": {
+          "checks": ["comments", "reasonable_length"]
+        }
+      },
       "files": [
         {
           "benchmark": "yieldx_transform.xsl",

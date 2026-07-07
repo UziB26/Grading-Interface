@@ -1,7 +1,7 @@
 {
   "assignment_id": "sales_ops_demo",
   "title": "Sales Ops Demo Assignment",
-  "version": "1.0",
+  "version": "1.1",
   "benchmark_dir": "benchmark_files_sales_demo",
   "submissions_dir": "student_submissions_sales_demo",
   "reports_dir": "outputs/grading_reports_sales_demo",
@@ -11,13 +11,20 @@
       "id": "q1",
       "label": "Clean Lead File",
       "max_mark": 30,
+      "marking_mode": "output_match",
       "compare_mode": "csv",
+      "match_rules": {
+        "numeric_tolerance_pct": 1.0,
+        "require_column_names": true,
+        "ignore_row_order": true
+      },
       "files": [{"benchmark": "clean_leads.csv", "seed_from": "test_uploads/sales_ops_demo/benchmarks/q1/clean_leads.csv"}]
     },
     {
       "id": "q2",
       "label": "Campaign Performance Summary",
       "max_mark": 20,
+      "marking_mode": "legacy_text",
       "compare_mode": "text",
       "files": [{"benchmark": "campaign_summary.md", "seed_from": "test_uploads/sales_ops_demo/benchmarks/q2/campaign_summary.md"}]
     },
@@ -25,14 +32,36 @@
       "id": "q3",
       "label": "Pipeline SQL",
       "max_mark": 25,
+      "marking_mode": "semantic_code",
       "compare_mode": "code",
+      "code_marking": {
+        "weights": { "correctness": 0.7, "practice": 0.3 },
+        "correctness": {
+          "method": "behavior_rules",
+          "rules_from_code_checks": true
+        },
+        "practice": {
+          "checks": ["comments", "no_select_star", "uses_aliases", "reasonable_length"]
+        }
+      },
       "files": [{"benchmark": "pipeline_metrics.sql", "seed_from": "test_uploads/sales_ops_demo/benchmarks/q3/pipeline_metrics.sql"}]
     },
     {
       "id": "q4",
       "label": "Lead XML Transform",
       "max_mark": 25,
+      "marking_mode": "mixed",
       "compare_mode": "mixed",
+      "code_marking": {
+        "weights": { "correctness": 0.7, "practice": 0.3 },
+        "correctness": {
+          "method": "behavior_rules",
+          "rules_from_code_checks": true
+        },
+        "practice": {
+          "checks": ["comments", "reasonable_length"]
+        }
+      },
       "files": [
         {"benchmark": "lead_transform.xsl", "seed_from": "test_uploads/sales_ops_demo/benchmarks/q4/lead_transform.xsl"},
         {"benchmark": "leads_output.xml", "seed_from": "test_uploads/sales_ops_demo/benchmarks/q4/leads_output.xml"}

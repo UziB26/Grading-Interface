@@ -21,7 +21,7 @@ from grading_app.config import (  # noqa: E402
     get_report_dir,
     get_submissions_dir,
 )
-from grading_app.manifest import load_manifest, set_active_manifest  # noqa: E402
+from grading_app.manifest import load_manifest, marking_mode_label, set_active_manifest  # noqa: E402
 from grading_app.grader import (  # noqa: E402
     CodeCheckResult,
     GradeResult,
@@ -36,6 +36,7 @@ from grading_app.upload_security import UploadValidationError  # noqa: E402
 
 app = Flask(__name__)
 app.secret_key = "assignment-grading-local-dev"
+GRADING_ENGINE_VERSION = "1.1-semantic"
 
 
 def ensure_directories() -> None:
@@ -147,10 +148,16 @@ def load_latest_reports() -> tuple[list[GradeResult], list[StudentSummary], list
     for item in payload.get("results", []):
         if "status" not in item:
             item["status"] = "missing" if not item.get("submitted_file") else "graded"
+        item.setdefault("marking_mode", "legacy_text")
+        item.setdefault("correctness_score", item.get("similarity"))
+        item.setdefault("practice_score", None)
         results.append(GradeResult(**item))
     summaries = []
     for item in payload.get("summaries", []):
         item.setdefault("missing_files", "")
+        item.setdefault("avg_correctness", None)
+        item.setdefault("avg_practice", None)
+        item.setdefault("code_structure_avg", None)
         summaries.append(StudentSummary(**item))
     code_checks = [CodeCheckResult(**item) for item in payload.get("code_checks", [])]
     return results, summaries, code_checks
@@ -172,14 +179,19 @@ def index():
         ("total_mark", "Total"),
         ("total_max", "Max"),
         ("percentage", "Percent"),
+        ("avg_correctness", "Avg Correctness"),
+        ("avg_practice", "Avg Practice"),
         ("missing_files", "Missing Files"),
-        ("code_structure_avg", "Code Checks"),
     ]
     result_columns = [
         ("student", "Student"),
         ("question", "Question"),
+        ("benchmark_file", "Benchmark"),
+        ("marking_mode", "Marking"),
         ("status", "Status"),
-        ("similarity", "Similarity"),
+        ("correctness_score", "Correctness"),
+        ("practice_score", "Practice"),
+        ("similarity", "Score"),
         ("mark", "Mark"),
         ("submitted_file", "Submitted File"),
         ("notes", "Notes"),
@@ -216,6 +228,18 @@ def index():
         "code_check_rows": code_check_rows,
     }
 
+    question_rows = [
+        {
+            "question_id": question.question_id,
+            "label": question.label,
+            "max_mark": question.max_mark,
+            "marking_mode": question.marking_mode,
+            "marking_label": marking_mode_label(question.marking_mode),
+            "compare_mode": question.compare_mode,
+        }
+        for question in manifest.questions
+    ]
+
     return render_template(
         "index.html",
         assignment_title=manifest.title,
@@ -223,6 +247,7 @@ def index():
         question_count=len(manifest.questions),
         total_max_mark=manifest.total_max_mark,
         question_specs=manifest.questions,
+        question_rows=question_rows,
         benchmarks=benchmarks,
         students=students,
         report_exists=(get_report_dir() / "summary_report.csv").exists(),
@@ -235,6 +260,7 @@ def index():
         available_manifests=available_manifests,
         active_manifest_rel=active_manifest_rel,
         manifest_details=manifest_details,
+        grading_engine_version=GRADING_ENGINE_VERSION,
     )
 
 

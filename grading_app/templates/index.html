@@ -13,6 +13,7 @@
       <p class="mt-2 text-sm text-slate-600">
         Active assignment: <span class="font-semibold text-slate-900">{{ assignment_title }}</span>
         ({{ assignment_id }}) - {{ question_count }} question(s), {{ "%.2f"|format(total_max_mark) }} marks total.
+        <span class="ml-2 rounded bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800">Engine {{ grading_engine_version }}</span>
       </p>
     </header>
 
@@ -194,11 +195,25 @@
 
     <section class="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 class="text-lg font-semibold">Configured Questions</h2>
+      <p class="mt-1 text-xs text-slate-500">Each question uses a marking mode that controls how submissions are scored.</p>
       <ul class="mt-3 grid gap-2 sm:grid-cols-2">
-        {% for question in question_specs %}
+        {% for row in question_rows %}
           <li class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-            <span class="mr-2 inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">{{ question.question_id }}</span>
-            {{ question.label }} ({{ "%.2f"|format(question.max_mark) }})
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">{{ row.question_id }}</span>
+              {% if row.marking_mode == "output_match" %}
+                <span class="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800" title="Values and outputs must match the benchmark">{{ row.marking_label }}</span>
+              {% elif row.marking_mode == "semantic_code" %}
+                <span class="inline-flex rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800" title="Correctness via behaviour rules + practice heuristics">{{ row.marking_label }}</span>
+              {% elif row.marking_mode == "text_rubric" %}
+                <span class="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800" title="Coverage of required rubric points">{{ row.marking_label }}</span>
+              {% elif row.marking_mode == "mixed" %}
+                <span class="inline-flex rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800" title="Per-file mode (output match or semantic code)">{{ row.marking_label }}</span>
+              {% else %}
+                <span class="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600" title="Legacy text similarity">{{ row.marking_label }}</span>
+              {% endif %}
+            </div>
+            <p class="mt-1">{{ row.label }} ({{ "%.2f"|format(row.max_mark) }} marks)</p>
           </li>
         {% endfor %}
       </ul>
@@ -218,6 +233,7 @@
     {% if summaries %}
     <section class="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 class="text-lg font-semibold">Student Summary</h2>
+      <p class="mt-1 text-xs text-slate-500">Totals out of {{ "%.0f"|format(total_max_mark) }} assignment marks. See Detailed Results below for per-file correctness and practice.</p>
       <div class="mt-3 overflow-x-auto">
         <table class="min-w-full border-collapse text-sm">
           <thead>
@@ -234,14 +250,21 @@
                 <td class="border border-slate-200 px-3 py-2">{{ "%.2f"|format(summary.total_mark) }}</td>
                 <td class="border border-slate-200 px-3 py-2">{{ "%.2f"|format(summary.total_max) }}</td>
                 <td class="border border-slate-200 px-3 py-2">{{ "%.1f"|format(summary.percentage) }}%</td>
-                <td class="border border-slate-200 px-3 py-2">{{ summary.missing_files or "None" }}</td>
                 <td class="border border-slate-200 px-3 py-2">
-                  {% if summary.code_structure_avg is not none %}
-                    {{ "%.0f"|format(summary.code_structure_avg * 100) }}%
+                  {% if summary.avg_correctness is not none %}
+                    {{ "%.0f"|format(summary.avg_correctness * 100) }}%
                   {% else %}
                     -
                   {% endif %}
                 </td>
+                <td class="border border-slate-200 px-3 py-2">
+                  {% if summary.avg_practice is not none %}
+                    {{ "%.0f"|format(summary.avg_practice * 100) }}%
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td class="border border-slate-200 px-3 py-2">{{ summary.missing_files or "None" }}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -267,6 +290,18 @@
               <tr class="{{ loop.cycle('bg-white', 'bg-slate-50') }}">
                 <td class="border border-slate-200 px-3 py-2">{{ result.student }}</td>
                 <td class="border border-slate-200 px-3 py-2">{{ result.question }}</td>
+                <td class="border border-slate-200 px-3 py-2 text-xs"><code>{{ result.benchmark_file.rsplit('/', 1)[-1].rsplit('\\', 1)[-1] }}</code></td>
+                <td class="border border-slate-200 px-3 py-2">
+                  {% if result.marking_mode == "output_match" %}
+                    <span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800">output</span>
+                  {% elif result.marking_mode == "semantic_code" %}
+                    <span class="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">code</span>
+                  {% elif result.marking_mode == "mixed" %}
+                    <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">mixed</span>
+                  {% else %}
+                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{{ result.marking_mode }}</span>
+                  {% endif %}
+                </td>
                 <td class="border border-slate-200 px-3 py-2">
                   {% if result.status == "graded" %}
                     <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">graded</span>
@@ -276,10 +311,24 @@
                     <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{{ result.status }}</span>
                   {% endif %}
                 </td>
+                <td class="border border-slate-200 px-3 py-2">
+                  {% if result.correctness_score is not none %}
+                    {{ "%.0f"|format(result.correctness_score * 100) }}%
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td class="border border-slate-200 px-3 py-2">
+                  {% if result.practice_score is not none %}
+                    {{ "%.0f"|format(result.practice_score * 100) }}%
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
                 <td class="border border-slate-200 px-3 py-2">{{ "%.1f"|format(result.similarity * 100) }}%</td>
                 <td class="border border-slate-200 px-3 py-2">{{ "%.2f"|format(result.mark) }} / {{ "%.2f"|format(result.max_mark) }}</td>
                 <td class="border border-slate-200 px-3 py-2">{{ result.submitted_file or "-" }}</td>
-                <td class="border border-slate-200 px-3 py-2">{{ result.notes }}</td>
+                <td class="border border-slate-200 px-3 py-2 text-xs">{{ result.notes }}</td>
               </tr>
             {% endfor %}
           </tbody>

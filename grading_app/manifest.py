@@ -8,12 +8,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
 ACTIVE_ASSIGNMENT_FILE = Path(__file__).resolve().parent / "active_assignment.json"
 DEFAULT_MANIFEST_PATH = ROOT / "assignments" / "technical_assignment_2024" / "assignment_manifest.json"
 
 VALID_COMPARE_MODES = {"text", "csv", "xml", "image", "code", "mixed"}
+VALID_MARKING_MODES = {"output_match", "semantic_code", "text_rubric", "legacy_text", "mixed"}
+VALID_CORRECTNESS_METHODS = {"behavior_rules", "output_execution"}
+VALID_PRACTICE_CHECKS = {
+    "comments",
+    "no_select_star",
+    "uses_aliases",
+    "reasonable_length",
+    "no_hardcoded_values",
+}
 VALID_ENGINES = {"ast", "regex"}
 
 
@@ -35,6 +43,38 @@ class CodeCheckSpec:
 
 
 @dataclass(frozen=True)
+class MatchRules:
+    numeric_tolerance_pct: float = 1.0
+    require_column_names: bool = True
+    ignore_row_order: bool = True
+
+
+@dataclass(frozen=True)
+class CodeMarkingWeights:
+    correctness: float = 0.7
+    practice: float = 0.3
+
+
+@dataclass(frozen=True)
+class CodeMarkingCorrectness:
+    method: str
+    rules: tuple[StructureRule, ...] = ()
+    rules_from_code_checks: bool = True
+
+
+@dataclass(frozen=True)
+class CodeMarkingPractice:
+    checks: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CodeMarkingSpec:
+    weights: CodeMarkingWeights
+    correctness: CodeMarkingCorrectness
+    practice: CodeMarkingPractice
+
+
+@dataclass(frozen=True)
 class QuestionSpec:
     question_id: str
     label: str
@@ -42,6 +82,10 @@ class QuestionSpec:
     source_paths: tuple[str | None, ...]
     max_mark: float
     compare_mode: str
+    marking_mode: str
+    match_rules: MatchRules
+    code_marking: CodeMarkingSpec | None
+    rubric_file: str | None
 
 
 @dataclass
@@ -125,6 +169,81 @@ def _parse_code_checks(raw: dict[str, Any]) -> dict[str, CodeCheckSpec]:
     return parsed
 
 
+def _parse_match_rules(raw: dict[str, Any] | None) -> MatchRules:
+    if not raw:
+        return MatchRules()
+    return MatchRules(
+        numeric_tolerance_pct=float(raw.get("numeric_tolerance_pct", 1.0)),
+        require_column_names=bool(raw.get("require_column_names", True)),
+        ignore_row_order=bool(raw.get("ignore_row_order", True)),
+    )
+
+
+def _parse_code_marking(raw: dict[str, Any] | None) -> CodeMarkingSpec | None:
+    if not raw:
+        return None
+    weights_raw = raw.get("weights", {})
+    correctness_raw = raw.get("correctness", {})
+    practice_raw = raw.get("practice", {})
+    method = str(correctness_raw.get("method", "behavior_rules")).strip().lower()
+    if method not in VALID_CORRECTNESS_METHODS:
+        raise ValueError(f"Unsupported correctness method '{method}'")
+    rules = tuple(_parse_rule(rule) for rule in correctness_raw.get("rules", []))
+    checks = _optional_tuple(practice_raw.get("checks"))
+    for check in checks:
+        if check not in VALID_PRACTICE_CHECKS:
+            raise ValueError(f"Unsupported practice check '{check}'")
+    return CodeMarkingSpec(
+        weights=CodeMarkingWeights(
+            correctness=float(weights_raw.get("correctness", 0.7)),
+            practice=float(weights_raw.get("practice", 0.3)),
+        ),
+        correctness=CodeMarkingCorrectness(
+            method=method,
+            rules=rules,
+            rules_from_code_checks=bool(correctness_raw.get("rules_from_code_checks", True)),
+        ),
+        practice=CodeMarkingPractice(checks=checks),
+    )
+
+
+def infer_marking_mode(compare_mode: str, explicit: str | None = None) -> str:
+    if explicit:
+        return explicit
+    if compare_mode in {"csv", "xml", "image"}:
+        return "output_match"
+    if compare_mode == "code":
+        return "semantic_code"
+    if compare_mode == "mixed":
+        return "mixed"
+    return "legacy_text"
+
+
+def marking_mode_label(mode: str) -> str:
+    labels = {
+        "output_match": "Output match",
+        "semantic_code": "Semantic code",
+        "text_rubric": "Rubric text",
+        "legacy_text": "Text similarity",
+        "mixed": "Mixed modes",
+    }
+    return labels.get(mode, mode.replace("_", " ").title())
+
+
+def marking_mode_for_file(question: QuestionSpec, filename: str) -> str:
+    mode = question.marking_mode
+    if mode != "mixed":
+        return mode
+    suffix = Path(filename).suffix.lower() if "." in filename else ""
+    if suffix == ".csv" or suffix == ".png":
+        return "output_match"
+    if suffix == ".xml":
+        return "output_match"
+    if suffix in {".sql", ".xsl", ".xslt", ".py"}:
+        return "semantic_code"
+    return "legacy_text"
+
+
 def _parse_questions(raw: list[dict[str, Any]]) -> tuple[QuestionSpec, ...]:
     questions: list[QuestionSpec] = []
     for item in raw:
@@ -134,6 +253,17 @@ def _parse_questions(raw: list[dict[str, Any]]) -> tuple[QuestionSpec, ...]:
         compare_mode = str(item.get("compare_mode", "text")).strip().lower()
         if compare_mode not in VALID_COMPARE_MODES:
             raise ValueError(f"Question '{question_id}' has invalid compare_mode '{compare_mode}'")
+        explicit_marking = item.get("marking_mode")
+        marking_mode = infer_marking_mode(
+            compare_mode,
+            str(explicit_marking).strip().lower() if explicit_marking else None,
+        )
+        if marking_mode not in VALID_MARKING_MODES:
+            raise ValueError(f"Question '{question_id}' has invalid marking_mode '{marking_mode}'")
+        match_rules = _parse_match_rules(item.get("match_rules"))
+        code_marking = _parse_code_marking(item.get("code_marking"))
+        rubric_file = item.get("rubric_file")
+        rubric_file = str(rubric_file).strip() if rubric_file else None
         files = item.get("files", [])
         if not files:
             raise ValueError(f"Question '{question_id}' must define at least one file")
@@ -154,6 +284,10 @@ def _parse_questions(raw: list[dict[str, Any]]) -> tuple[QuestionSpec, ...]:
                 source_paths=tuple(source_paths),
                 max_mark=max_mark,
                 compare_mode=compare_mode,
+                marking_mode=marking_mode,
+                match_rules=match_rules,
+                code_marking=code_marking,
+                rubric_file=rubric_file,
             )
         )
     return tuple(questions)
