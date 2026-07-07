@@ -1,0 +1,68 @@
+{
+  "assignment_id": "sales_ops_demo",
+  "title": "Sales Ops Demo Assignment",
+  "version": "1.0",
+  "benchmark_dir": "benchmark_files_sales_demo",
+  "submissions_dir": "student_submissions_sales_demo",
+  "reports_dir": "outputs/grading_reports_sales_demo",
+  "allowed_extensions": [".csv", ".md", ".sql", ".xml", ".xsl", ".xslt", ".txt", ".zip"],
+  "questions": [
+    {
+      "id": "q1",
+      "label": "Clean Lead File",
+      "max_mark": 30,
+      "compare_mode": "csv",
+      "files": [{"benchmark": "clean_leads.csv", "seed_from": "test_uploads/sales_ops_demo/benchmarks/q1/clean_leads.csv"}]
+    },
+    {
+      "id": "q2",
+      "label": "Campaign Performance Summary",
+      "max_mark": 20,
+      "compare_mode": "text",
+      "files": [{"benchmark": "campaign_summary.md", "seed_from": "test_uploads/sales_ops_demo/benchmarks/q2/campaign_summary.md"}]
+    },
+    {
+      "id": "q3",
+      "label": "Pipeline SQL",
+      "max_mark": 25,
+      "compare_mode": "code",
+      "files": [{"benchmark": "pipeline_metrics.sql", "seed_from": "test_uploads/sales_ops_demo/benchmarks/q3/pipeline_metrics.sql"}]
+    },
+    {
+      "id": "q4",
+      "label": "Lead XML Transform",
+      "max_mark": 25,
+      "compare_mode": "mixed",
+      "files": [
+        {"benchmark": "lead_transform.xsl", "seed_from": "test_uploads/sales_ops_demo/benchmarks/q4/lead_transform.xsl"},
+        {"benchmark": "leads_output.xml", "seed_from": "test_uploads/sales_ops_demo/benchmarks/q4/leads_output.xml"}
+      ]
+    }
+  ],
+  "submission_aliases": {
+    "clean_leads.csv": ["clean_leads.csv", "q1_clean_leads.csv", "leads_cleaned.csv"],
+    "campaign_summary.md": ["campaign_summary.md", "q2_summary.md"],
+    "pipeline_metrics.sql": ["pipeline_metrics.sql", "q3_pipeline.sql"],
+    "lead_transform.xsl": ["lead_transform.xsl", "lead_transform.xslt", "q4_transform.xsl"],
+    "leads_output.xml": ["leads_output.xml", "q4_output.xml"]
+  },
+  "code_checks": {
+    ".sql": {
+      "engine": "regex",
+      "rules": [
+        {"label": "uses distinct", "pattern": "COUNT\\s*\\(\\s*DISTINCT"},
+        {"label": "has grouping", "pattern": "GROUP\\s+BY"},
+        {"label": "has won filter", "pattern": "won|closed_won"}
+      ]
+    },
+    ".xsl": {
+      "engine": "regex",
+      "rules": [
+        {"label": "contains template", "pattern": "xsl:template"},
+        {"label": "maps score field", "pattern": "score|lead_score"},
+        {"label": "outputs xml", "pattern": "method=\\\"xml\\\"|lead"}
+      ]
+    },
+    ".xslt": {"engine": "regex", "inherit_from": ".xsl"}
+  }
+}

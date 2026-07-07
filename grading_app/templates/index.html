@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assignment Grading</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <header class="mb-6">
+      <h1 class="text-3xl font-bold tracking-tight">Assignment Grading</h1>
+      <p class="mt-2 text-sm text-slate-600">
+        Active assignment: <span class="font-semibold text-slate-900">{{ assignment_title }}</span>
+        ({{ assignment_id }}) - {{ question_count }} question(s), {{ "%.2f"|format(total_max_mark) }} marks total.
+      </p>
+    </header>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="fixed right-4 top-4 z-50 space-y-2">
+          {% for message in messages %}
+            <div class="rounded-lg border border-cyan-300 bg-cyan-50 px-4 py-3 text-sm text-cyan-900 shadow">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div class="grid gap-5 md:grid-cols-3">
+      <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-3">
+        <h2 class="text-lg font-semibold">Configuration</h2>
+        <p class="mt-1 text-xs text-slate-500">Switch the active assignment manifest or upload a new one.</p>
+        <div class="mt-4 grid gap-4 md:grid-cols-2">
+          <form method="post" action="{{ url_for('switch_manifest_view') }}" class="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <label class="mb-1 block text-sm font-medium">Active manifest</label>
+            <select name="manifest_path" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+              {% for path in available_manifests %}
+                <option value="{{ path }}" {% if path == active_manifest_rel %}selected{% endif %}>{{ path }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700">
+              Activate Selected Manifest
+            </button>
+          </form>
+
+          <form method="post" action="{{ url_for('upload_manifest_view') }}" enctype="multipart/form-data" class="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div>
+              <label class="mb-1 block text-sm font-medium">Assignment folder name</label>
+              <input name="assignment_slug" required placeholder="e.g. assignment_apr_2026" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium">Manifest JSON</label>
+              <input type="file" name="manifest_file" accept=".json" required class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium">Benchmarks zip (optional)</label>
+              <input type="file" name="benchmarks_zip" accept=".zip" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+            </div>
+            <button type="submit" class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700">
+              Upload and Activate Manifest
+            </button>
+          </form>
+        </div>
+
+        <form method="post" action="{{ url_for('reset_data_view') }}" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-4">
+          <div class="grid gap-3 md:grid-cols-3 md:items-end">
+            <div>
+              <label class="mb-1 block text-sm font-medium text-rose-900">Reset uploaded data</label>
+              <select name="scope" class="w-full rounded-md border border-rose-300 bg-white px-3 py-2 text-sm">
+                <option value="all">All (benchmarks + submissions + reports)</option>
+                <option value="benchmarks">Benchmarks only</option>
+                <option value="submissions">Submissions only</option>
+                <option value="reports">Reports only</option>
+              </select>
+            </div>
+            <div class="md:col-span-2">
+              <button
+                type="submit"
+                onclick="return confirm('This will permanently remove uploaded test data for the selected scope. Continue?');"
+                class="rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-700"
+              >
+                Reset Test Data
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <h3 class="text-sm font-semibold text-slate-900">Manifest Details</h3>
+          <div class="mt-3 grid gap-3 text-sm md:grid-cols-2">
+            <p><span class="font-medium text-slate-700">Version:</span> {{ manifest_details.version }}</p>
+            <p><span class="font-medium text-slate-700">Questions:</span> {{ manifest_details.question_count }}</p>
+            <p><span class="font-medium text-slate-700">Total marks:</span> {{ "%.2f"|format(manifest_details.total_max_mark) }}</p>
+            <p><span class="font-medium text-slate-700">Manifest:</span> <code class="text-xs">{{ manifest_details.manifest_path }}</code></p>
+            <p><span class="font-medium text-slate-700">Benchmarks dir:</span> <code class="text-xs">{{ manifest_details.benchmark_dir }}</code></p>
+            <p><span class="font-medium text-slate-700">Submissions dir:</span> <code class="text-xs">{{ manifest_details.submissions_dir }}</code></p>
+            <p><span class="font-medium text-slate-700">Reports dir:</span> <code class="text-xs">{{ manifest_details.reports_dir }}</code></p>
+            <p><span class="font-medium text-slate-700">Allowed extensions:</span> <span class="text-xs">{{ manifest_details.allowed_extensions }}</span></p>
+          </div>
+
+          <div class="mt-4 overflow-x-auto">
+            <table class="min-w-full border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-100 text-left text-slate-700">
+                  <th class="border border-slate-200 px-2 py-1 font-semibold">Suffix</th>
+                  <th class="border border-slate-200 px-2 py-1 font-semibold">Engine</th>
+                  <th class="border border-slate-200 px-2 py-1 font-semibold">Rule Count</th>
+                  <th class="border border-slate-200 px-2 py-1 font-semibold">Inherits</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in manifest_details.code_check_rows %}
+                  <tr class="{{ loop.cycle('bg-white', 'bg-slate-50') }}">
+                    <td class="border border-slate-200 px-2 py-1"><code>{{ row.suffix }}</code></td>
+                    <td class="border border-slate-200 px-2 py-1">{{ row.engine }}</td>
+                    <td class="border border-slate-200 px-2 py-1">{{ row.rules }}</td>
+                    <td class="border border-slate-200 px-2 py-1"><code>{{ row.inherit_from }}</code></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 class="text-lg font-semibold">Benchmarks</h2>
+        <p class="mt-1 text-xs text-slate-500">Upload benchmark files by question.</p>
+        <form class="mt-4 space-y-3" method="post" action="{{ url_for('upload_benchmark') }}" enctype="multipart/form-data">
+          <div>
+            <label class="mb-1 block text-sm font-medium">Question</label>
+            <select name="question" required class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+              {% for question in question_specs %}
+                <option value="{{ question.question_id }}">{{ question.question_id }} - {{ question.label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium">Benchmark file</label>
+            <input type="file" name="file" required class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+          </div>
+          <button type="submit" class="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700">
+            Upload Benchmark
+          </button>
+        </form>
+        <form class="mt-3" method="post" action="{{ url_for('seed_benchmarks_view') }}">
+          <button type="submit" class="w-full rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800">
+            Load Benchmarks From Solution
+          </button>
+        </form>
+      </section>
+
+      <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 class="text-lg font-semibold">Student Submission</h2>
+        <p class="mt-1 text-xs text-slate-500">Upload files or a zip per student.</p>
+        <form class="mt-4 space-y-3" method="post" action="{{ url_for('upload_submission') }}" enctype="multipart/form-data">
+          <div>
+            <label class="mb-1 block text-sm font-medium">Student name</label>
+            <input name="student" placeholder="e.g. Jane Doe" required class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium">Files or zip archive</label>
+            <input type="file" name="files" multiple required class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+          </div>
+          <button type="submit" class="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700">
+            Upload Submission
+          </button>
+        </form>
+      </section>
+
+      <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 class="text-lg font-semibold">Run Grading</h2>
+        <p class="mt-1 text-xs text-slate-500">Compute scores and export reports.</p>
+        <form id="grade-form" class="mt-4 space-y-3" method="post" action="{{ url_for('grade') }}">
+          <div>
+            <label class="mb-1 block text-sm font-medium">Mark scale</label>
+            <input name="mark_scale" type="number" value="1" min="0.1" max="2" step="0.1" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+          </div>
+          <button id="grade-submit-btn" type="submit" class="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700">
+            Run Grading
+          </button>
+        </form>
+        {% if report_exists %}
+          <div class="mt-4 space-y-1 text-sm">
+            <a class="block text-indigo-700 hover:underline" href="{{ url_for('download_report', report_name='summary_report.csv') }}">Download detail CSV</a>
+            <a class="block text-indigo-700 hover:underline" href="{{ url_for('download_report', report_name='student_totals.csv') }}">Download student totals</a>
+            <a class="block text-indigo-700 hover:underline" href="{{ url_for('download_report', report_name='code_checks.csv') }}">Download code checks</a>
+          </div>
+        {% endif %}
+      </section>
+    </div>
+
+    <section class="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 class="text-lg font-semibold">Configured Questions</h2>
+      <ul class="mt-3 grid gap-2 sm:grid-cols-2">
+        {% for question in question_specs %}
+          <li class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+            <span class="mr-2 inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">{{ question.question_id }}</span>
+            {{ question.label }} ({{ "%.2f"|format(question.max_mark) }})
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    {% if benchmarks %}
+    <section class="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 class="text-lg font-semibold">Current Benchmark Files</h2>
+      <ul class="mt-3 list-disc space-y-1 pl-6 text-sm text-slate-700">
+        {% for item in benchmarks %}
+          <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if summaries %}
+    <section class="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 class="text-lg font-semibold">Student Summary</h2>
+      <div class="mt-3 overflow-x-auto">
+        <table class="min-w-full border-collapse text-sm">
+          <thead>
+            <tr class="bg-slate-100 text-left text-slate-700">
+              {% for _, label in summary_columns %}
+                <th class="border border-slate-200 px-3 py-2 font-semibold">{{ label }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for summary in summaries %}
+              <tr class="{{ loop.cycle('bg-white', 'bg-slate-50') }}">
+                <td class="border border-slate-200 px-3 py-2">{{ summary.student }}</td>
+                <td class="border border-slate-200 px-3 py-2">{{ "%.2f"|format(summary.total_mark) }}</td>
+                <td class="border border-slate-200 px-3 py-2">{{ "%.2f"|format(summary.total_max) }}</td>
+                <td class="border border-slate-200 px-3 py-2">{{ "%.1f"|format(summary.percentage) }}%</td>
+                <td class="border border-slate-200 px-3 py-2">{{ summary.missing_files or "None" }}</td>
+                <td class="border border-slate-200 px-3 py-2">
+                  {% if summary.code_structure_avg is not none %}
+                    {{ "%.0f"|format(summary.code_structure_avg * 100) }}%
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if results %}
+    <section class="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 class="text-lg font-semibold">Detailed Results</h2>
+      <div class="mt-3 overflow-x-auto">
+        <table class="min-w-full border-collapse text-sm">
+          <thead>
+            <tr class="bg-slate-100 text-left text-slate-700">
+              {% for _, label in result_columns %}
+                <th class="border border-slate-200 px-3 py-2 font-semibold">{{ label }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for result in results %}
+              <tr class="{{ loop.cycle('bg-white', 'bg-slate-50') }}">
+                <td class="border border-slate-200 px-3 py-2">{{ result.student }}</td>
+                <td class="border border-slate-200 px-3 py-2">{{ result.question }}</td>
+                <td class="border border-slate-200 px-3 py-2">
+                  {% if result.status == "graded" %}
+                    <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">graded</span>
+                  {% elif result.status == "missing" %}
+                    <span class="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-800">missing</span>
+                  {% else %}
+                    <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{{ result.status }}</span>
+                  {% endif %}
+                </td>
+                <td class="border border-slate-200 px-3 py-2">{{ "%.1f"|format(result.similarity * 100) }}%</td>
+                <td class="border border-slate-200 px-3 py-2">{{ "%.2f"|format(result.mark) }} / {{ "%.2f"|format(result.max_mark) }}</td>
+                <td class="border border-slate-200 px-3 py-2">{{ result.submitted_file or "-" }}</td>
+                <td class="border border-slate-200 px-3 py-2">{{ result.notes }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if code_checks %}
+    <section class="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 class="text-lg font-semibold">Code Structure Checks</h2>
+      <div class="mt-3 overflow-x-auto">
+        <table class="min-w-full border-collapse text-sm">
+          <thead>
+            <tr class="bg-slate-100 text-left text-slate-700">
+              {% for _, label in code_check_columns %}
+                <th class="border border-slate-200 px-3 py-2 font-semibold">{{ label }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for check in code_checks %}
+              <tr class="{{ loop.cycle('bg-white', 'bg-slate-50') }}">
+                <td class="border border-slate-200 px-3 py-2">{{ check.student }}</td>
+                <td class="border border-slate-200 px-3 py-2">{{ check.file_path }}</td>
+                <td class="border border-slate-200 px-3 py-2">
+                  {% if check.compiles %}
+                    <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">yes</span>
+                  {% else %}
+                    <span class="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-800">no</span>
+                  {% endif %}
+                </td>
+                <td class="border border-slate-200 px-3 py-2">{{ check.checks_passed }} / {{ check.checks_total }} ({{ "%.0f"|format(check.structure_score * 100) }}%)</td>
+                <td class="border border-slate-200 px-3 py-2">{{ check.details }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+  </div>
+
+  <script>
+    const gradeForm = document.getElementById("grade-form");
+    const gradeButton = document.getElementById("grade-submit-btn");
+    if (gradeForm && gradeButton) {
+      gradeForm.addEventListener("submit", () => {
+        gradeButton.disabled = true;
+        gradeButton.textContent = "Processing...";
+        gradeButton.classList.add("opacity-70", "cursor-not-allowed");
+      });
+    }
+  </script>
+</body>
+</html>

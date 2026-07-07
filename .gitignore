@@ -1,0 +1,6 @@
+benchmark_files*/
+student_submissions*/
+outputs/
+.venv/
+__pycache__/
+*.pyc

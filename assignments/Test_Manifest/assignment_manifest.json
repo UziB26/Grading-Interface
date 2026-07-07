@@ -1,0 +1,272 @@
+{
+  "assignment_id": "technical_assignment_2024",
+  "title": "Technical Assignment 2024",
+  "version": "1.0",
+  "benchmark_dir": "benchmark_files",
+  "submissions_dir": "student_submissions",
+  "reports_dir": "outputs/grading_reports",
+  "allowed_extensions": [
+    ".csv",
+    ".py",
+    ".sql",
+    ".xsl",
+    ".xslt",
+    ".xml",
+    ".txt",
+    ".md",
+    ".zip",
+    ".png"
+  ],
+  "questions": [
+    {
+      "id": "q1",
+      "label": "Question 1 - Data preparation notes",
+      "max_mark": 5,
+      "compare_mode": "text",
+      "files": [
+        {
+          "benchmark": "q1_data_preparation_notes.md",
+          "seed_from": "outputs/q1_data_preparation_notes.md"
+        }
+      ]
+    },
+    {
+      "id": "q2",
+      "label": "Question 2 - Contract summary",
+      "max_mark": 10,
+      "compare_mode": "csv",
+      "files": [
+        {
+          "benchmark": "q2_contract_summary.csv",
+          "seed_from": "outputs/q2_contract_summary.csv"
+        }
+      ]
+    },
+    {
+      "id": "q3",
+      "label": "Question 3 - Task statistics",
+      "max_mark": 15,
+      "compare_mode": "csv",
+      "files": [
+        {
+          "benchmark": "q3_task_statistics.csv",
+          "seed_from": "outputs/q3_task_statistics.csv"
+        }
+      ]
+    },
+    {
+      "id": "q4",
+      "label": "Question 4 - Waiting entries",
+      "max_mark": 10,
+      "compare_mode": "csv",
+      "files": [
+        {
+          "benchmark": "q4_waiting_entries_by_task.csv",
+          "seed_from": "outputs/q4_waiting_entries_by_task.csv"
+        }
+      ]
+    },
+    {
+      "id": "q5",
+      "label": "Question 5 - Top processing times",
+      "max_mark": 10,
+      "compare_mode": "csv",
+      "files": [
+        {
+          "benchmark": "q5_top5_processing_time_last_week.csv",
+          "seed_from": "outputs/q5_top5_processing_time_last_week.csv"
+        }
+      ]
+    },
+    {
+      "id": "q6",
+      "label": "Question 6 - Contract paths",
+      "max_mark": 10,
+      "compare_mode": "csv",
+      "files": [
+        {
+          "benchmark": "contractPaths_output.csv",
+          "seed_from": "outputs/contractPaths_output.csv"
+        }
+      ]
+    },
+    {
+      "id": "q7",
+      "label": "Question 7 - Data analysis report",
+      "max_mark": 15,
+      "compare_mode": "text",
+      "files": [
+        {
+          "benchmark": "q7_data_analysis_report.md",
+          "seed_from": "outputs/q7_data_analysis_report.md"
+        }
+      ]
+    },
+    {
+      "id": "q8",
+      "label": "Question 8 - SQL queries",
+      "max_mark": 10,
+      "compare_mode": "code",
+      "files": [
+        {
+          "benchmark": "workflow_queries.sql",
+          "seed_from": "sql/workflow_queries.sql"
+        }
+      ]
+    },
+    {
+      "id": "q9",
+      "label": "Question 9 - XML/XSLT transform",
+      "max_mark": 15,
+      "compare_mode": "mixed",
+      "files": [
+        {
+          "benchmark": "yieldx_transform.xsl",
+          "seed_from": "xml/yieldx_transform.xsl"
+        },
+        {
+          "benchmark": "futures_price_generated.xml",
+          "seed_from": "outputs/futures_price_generated.xml"
+        }
+      ]
+    }
+  ],
+  "submission_aliases": {
+    "q1_data_preparation_notes.md": [
+      "q1_data_preparation_notes.md",
+      "data_preparation_notes.md"
+    ],
+    "q2_contract_summary.csv": [
+      "q2_contract_summary.csv",
+      "contract_summary.csv"
+    ],
+    "q3_task_statistics.csv": [
+      "q3_task_statistics.csv",
+      "task_statistics.csv"
+    ],
+    "q4_waiting_entries_by_task.csv": [
+      "q4_waiting_entries_by_task.csv",
+      "waiting_entries_by_task.csv"
+    ],
+    "q5_top5_processing_time_last_week.csv": [
+      "q5_top5_processing_time_last_week.csv",
+      "top5_processing_time_last_week.csv"
+    ],
+    "contractPaths_output.csv": [
+      "contractPaths_output.csv",
+      "contract_paths_output.csv",
+      "q6_contract_paths.csv"
+    ],
+    "q7_data_analysis_report.md": [
+      "q7_data_analysis_report.md",
+      "data_analysis_report.md"
+    ],
+    "workflow_queries.sql": [
+      "workflow_queries.sql",
+      "q8_workflow_queries.sql"
+    ],
+    "yieldx_transform.xsl": [
+      "yieldx_transform.xsl",
+      "yieldx_transform.xslt",
+      "transform.xsl"
+    ],
+    "futures_price_generated.xml": [
+      "futures_price_generated.xml",
+      "futures_price.xml",
+      "output.xml"
+    ]
+  },
+  "code_checks": {
+    ".py": {
+      "engine": "ast",
+      "rules": [
+        {
+          "label": "pandas import",
+          "type": "import_module",
+          "modules": ["pandas"]
+        },
+        {
+          "label": "timestamp parsing",
+          "type": "token_match",
+          "tokens": ["ts_time_long", "status_time_long", "to_datetime"]
+        },
+        {
+          "label": "wait time logic",
+          "type": "token_match",
+          "tokens": ["wait_time", "wait_time_ms"]
+        },
+        {
+          "label": "processing time logic",
+          "type": "token_match",
+          "tokens": ["processing_time", "processing_time_ms"]
+        },
+        {
+          "label": "throughput logic",
+          "type": "token_match",
+          "tokens": ["throughput", "throughput_per_second", "throughput_per_minute"]
+        },
+        {
+          "label": "contract summary",
+          "type": "token_match",
+          "tokens": ["fc_ctype", "contract_summary", "question_2", "question_2_contract_summary"]
+        },
+        {
+          "label": "task statistics",
+          "type": "token_match",
+          "tokens": ["task_statistics", "question_3", "question_3_task_statistics"]
+        },
+        {
+          "label": "contract paths",
+          "type": "token_match",
+          "tokens": ["contractpaths", "contract_paths", "question_6", "question_6_contract_paths"]
+        }
+      ]
+    },
+    ".sql": {
+      "engine": "regex",
+      "rules": [
+        {
+          "label": "distinct contract count",
+          "pattern": "COUNT\\s*\\(\\s*DISTINCT"
+        },
+        {
+          "label": "status_taken filter",
+          "pattern": "status_taken"
+        },
+        {
+          "label": "task join",
+          "pattern": "WorkflowTaskInfo|filter_code|xmlflow_status"
+        },
+        {
+          "label": "processing CTE or pairing",
+          "pattern": "WITH|input|output|processing"
+        }
+      ]
+    },
+    ".xsl": {
+      "engine": "regex",
+      "rules": [
+        {
+          "label": "futures filter",
+          "pattern": "PutCall|Future"
+        },
+        {
+          "label": "contract code filter",
+          "pattern": "ContractCode|GOVI|R186"
+        },
+        {
+          "label": "murex output structure",
+          "pattern": "scpr:|mp:date|bid1|ask1"
+        },
+        {
+          "label": "market routing",
+          "pattern": "ZA JSE|ZAR BD GOV"
+        }
+      ]
+    },
+    ".xslt": {
+      "engine": "regex",
+      "inherit_from": ".xsl"
+    }
+  }
+}

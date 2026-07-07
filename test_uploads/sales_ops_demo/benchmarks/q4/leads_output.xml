@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lead_export>
+  <lead>
+    <id>L-001</id>
+    <region>EMEA</region>
+    <status>won</status>
+    <lead_score>95</lead_score>
+  </lead>
+  <lead>
+    <id>L-002</id>
+    <region>AMER</region>
+    <status>open</status>
+    <lead_score>74</lead_score>
+  </lead>
+</lead_export>
