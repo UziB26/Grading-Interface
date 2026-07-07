@@ -123,6 +123,15 @@ Each manifest controls:
 - `mixed`: per-file mode in same question
 - `image`: binary comparison
 
+### Grading by file type
+
+| Output type | Comparison method |
+|-------------|-------------------|
+| CSV | Column overlap, row counts, numeric tolerance (1%) |
+| Markdown / text | Normalised line-by-line similarity |
+| XML | Structure walk with attribute/value comparison |
+| SQL / XSLT | Read-only text pattern checks (not executed) |
+
 ### Scoring
 
 For each expected benchmark file:
