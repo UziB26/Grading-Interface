@@ -312,6 +312,17 @@
                   {% endif %}
                 </td>
                 <td class="border border-slate-200 px-3 py-2">
+                  {% if result.correctness_method == "execution-based" %}
+                    <span class="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-semibold text-teal-800">execution-based</span>
+                  {% elif result.correctness_method == "rule-based" %}
+                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">rule-based</span>
+                  {% elif result.correctness_method == "output-match" %}
+                    <span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800">output-match</span>
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td class="border border-slate-200 px-3 py-2">
                   {% if result.correctness_score is not none %}
                     {{ "%.0f"|format(result.correctness_score * 100) }}%
                   {% else %}

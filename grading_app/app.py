@@ -151,6 +151,7 @@ def load_latest_reports() -> tuple[list[GradeResult], list[StudentSummary], list
         item.setdefault("marking_mode", "legacy_text")
         item.setdefault("correctness_score", item.get("similarity"))
         item.setdefault("practice_score", None)
+        item.setdefault("correctness_method", None)
         results.append(GradeResult(**item))
     summaries = []
     for item in payload.get("summaries", []):
@@ -189,6 +190,7 @@ def index():
         ("benchmark_file", "Benchmark"),
         ("marking_mode", "Marking"),
         ("status", "Status"),
+        ("correctness_method", "Correctness Mode"),
         ("correctness_score", "Correctness"),
         ("practice_score", "Practice"),
         ("similarity", "Score"),

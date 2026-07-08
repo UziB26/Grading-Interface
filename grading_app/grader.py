@@ -30,6 +30,7 @@ class GradeResult:
     similarity: float
     correctness_score: float | None
     practice_score: float | None
+    correctness_method: str | None
     mark: float
     max_mark: float
     notes: str
@@ -313,13 +314,18 @@ def grade_file_item(
     if marking_mode == "semantic_code":
         try:
             semantic = grade_semantic_code(submitted, question, manifest, benchmark)
-            notes = f"{semantic.correctness_details}; {semantic.practice_details}"
+            method_label = semantic.correctness_method
+            notes = (
+                f"Correctness mode: {method_label}; "
+                f"{semantic.correctness_details}; {semantic.practice_details}"
+            )
             return GradeResult(
                 **base,
                 status="graded",
                 similarity=semantic.combined,
                 correctness_score=semantic.correctness,
                 practice_score=semantic.practice,
+                correctness_method=method_label,
                 mark=round(semantic.combined * max_mark, 2),
                 notes=notes,
             )
@@ -330,6 +336,7 @@ def grade_file_item(
                 similarity=0.0,
                 correctness_score=0.0,
                 practice_score=0.0,
+                correctness_method=None,
                 mark=0.0,
                 notes=f"Semantic grading failed: {exc}",
             )
@@ -341,6 +348,7 @@ def grade_file_item(
             similarity=0.0,
             correctness_score=None,
             practice_score=None,
+            correctness_method=None,
             mark=0.0,
             notes="Rubric text grading not yet implemented; configure legacy_text or add rubric_file",
         )
@@ -366,6 +374,7 @@ def grade_file_item(
             similarity=round(score, 4),
             correctness_score=round(score, 4),
             practice_score=None,
+            correctness_method="output-match" if marking_mode == "output_match" else None,
             mark=round(score * max_mark, 2),
             notes=notes,
         )
@@ -376,6 +385,7 @@ def grade_file_item(
             similarity=0.0,
             correctness_score=0.0,
             practice_score=None,
+            correctness_method=None,
             mark=0.0,
             notes=f"Missing: {benchmark_name} ({exc})",
         )
@@ -386,6 +396,7 @@ def grade_file_item(
             similarity=0.0,
             correctness_score=0.0,
             practice_score=None,
+            correctness_method=None,
             mark=0.0,
             notes=f"Comparison failed: {exc}",
         )
@@ -429,6 +440,7 @@ def grade_student(student_dir: Path, mark_scale: float = 1.0) -> list[GradeResul
                         similarity=0.0,
                         correctness_score=0.0,
                         practice_score=None,
+                        correctness_method=None,
                         mark=0.0,
                         max_mark=file_max_mark,
                         notes=f"Missing: {benchmark_name}",
@@ -449,6 +461,7 @@ def grade_student(student_dir: Path, mark_scale: float = 1.0) -> list[GradeResul
                         similarity=0.0,
                         correctness_score=0.0,
                         practice_score=None,
+                        correctness_method=None,
                         mark=0.0,
                         max_mark=file_max_mark,
                         notes=f"Missing: {benchmark_name}",

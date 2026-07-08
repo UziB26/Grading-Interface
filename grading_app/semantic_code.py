@@ -27,6 +27,7 @@ class SemanticCodeScore:
     practice_total: int
     correctness_details: str
     practice_details: str
+    correctness_method: str
 
 
 def _default_practice_checks(suffix: str) -> tuple[str, ...]:
@@ -345,6 +346,7 @@ def grade_semantic_code(
     spec = question.code_marking
     if spec and spec.correctness.method == "output_execution":
         execution = spec.correctness.execution
+        correctness_method = "execution-based"
         if submitted.suffix.lower() == ".sql" and execution and execution.engine == "sqlite":
             correctness, correctness_passed, correctness_total, correctness_details = _score_sql_output_execution(
                 submitted, benchmark, execution
@@ -359,6 +361,7 @@ def grade_semantic_code(
             correctness_total = 1
             correctness_details = "output_execution configured, but no supported execution profile for this file type"
     else:
+        correctness_method = "rule-based"
         correctness, correctness_passed, correctness_total, correctness_details = _score_behavior_rules(
             submitted, rules
         )
@@ -378,4 +381,5 @@ def grade_semantic_code(
         practice_total=practice_total,
         correctness_details=correctness_details,
         practice_details=practice_details,
+        correctness_method=correctness_method,
     )
