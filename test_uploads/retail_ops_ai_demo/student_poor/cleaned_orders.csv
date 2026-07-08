@@ -1,0 +1,4 @@
+order_id,region,status,order_value
+O-001,EMEA,open,200
+O-009,LATAM,open,150
+O-010,LATAM,cancelled,90

@@ -13,8 +13,16 @@ ACTIVE_ASSIGNMENT_FILE = Path(__file__).resolve().parent / "active_assignment.js
 DEFAULT_MANIFEST_PATH = ROOT / "assignments" / "technical_assignment_2024" / "assignment_manifest.json"
 
 VALID_COMPARE_MODES = {"text", "csv", "xml", "image", "code", "mixed"}
-VALID_MARKING_MODES = {"output_match", "semantic_code", "text_rubric", "legacy_text", "mixed"}
+VALID_MARKING_MODES = {
+    "output_match",
+    "semantic_code",
+    "semantic_text",
+    "text_rubric",
+    "legacy_text",
+    "mixed",
+}
 VALID_CORRECTNESS_METHODS = {"behavior_rules", "output_execution"}
+VALID_PRACTICE_METHODS = {"rules", "ai", "hybrid"}
 VALID_PRACTICE_CHECKS = {
     "comments",
     "no_select_star",
@@ -66,6 +74,9 @@ class CodeMarkingCorrectness:
 @dataclass(frozen=True)
 class CodeMarkingPractice:
     checks: tuple[str, ...] = ()
+    method: str = "rules"
+    rules_weight: float = 0.5
+    ai_weight: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -101,6 +112,7 @@ class QuestionSpec:
     marking_mode: str
     match_rules: MatchRules
     code_marking: CodeMarkingSpec | None
+    benchmark_points: str | None
     rubric_file: str | None
 
 
@@ -209,6 +221,18 @@ def _parse_code_marking(raw: dict[str, Any] | None) -> CodeMarkingSpec | None:
     for check in checks:
         if check not in VALID_PRACTICE_CHECKS:
             raise ValueError(f"Unsupported practice check '{check}'")
+    practice_method = str(practice_raw.get("method", "rules")).strip().lower()
+    if practice_method not in VALID_PRACTICE_METHODS:
+        raise ValueError(f"Unsupported practice method '{practice_method}'")
+    rules_weight = float(practice_raw.get("rules_weight", 0.5))
+    ai_weight = float(practice_raw.get("ai_weight", 0.5))
+    if practice_method == "hybrid":
+        weight_total = rules_weight + ai_weight
+        if weight_total <= 0:
+            rules_weight, ai_weight = 0.5, 0.5
+        else:
+            rules_weight /= weight_total
+            ai_weight /= weight_total
     execution_raw = correctness_raw.get("execution")
     execution = _parse_code_execution(execution_raw) if execution_raw else None
     return CodeMarkingSpec(
@@ -222,7 +246,12 @@ def _parse_code_marking(raw: dict[str, Any] | None) -> CodeMarkingSpec | None:
             rules_from_code_checks=bool(correctness_raw.get("rules_from_code_checks", True)),
             execution=execution,
         ),
-        practice=CodeMarkingPractice(checks=checks),
+        practice=CodeMarkingPractice(
+            checks=checks,
+            method=practice_method,
+            rules_weight=rules_weight,
+            ai_weight=ai_weight,
+        ),
     )
 
 
@@ -269,6 +298,7 @@ def marking_mode_label(mode: str) -> str:
     labels = {
         "output_match": "Output match",
         "semantic_code": "Semantic code",
+        "semantic_text": "Semantic text",
         "text_rubric": "Rubric text",
         "legacy_text": "Text similarity",
         "mixed": "Mixed modes",
@@ -308,6 +338,8 @@ def _parse_questions(raw: list[dict[str, Any]]) -> tuple[QuestionSpec, ...]:
             raise ValueError(f"Question '{question_id}' has invalid marking_mode '{marking_mode}'")
         match_rules = _parse_match_rules(item.get("match_rules"))
         code_marking = _parse_code_marking(item.get("code_marking"))
+        benchmark_points = item.get("benchmark_points")
+        benchmark_points = str(benchmark_points).strip() if benchmark_points else None
         rubric_file = item.get("rubric_file")
         rubric_file = str(rubric_file).strip() if rubric_file else None
         files = item.get("files", [])
@@ -333,6 +365,7 @@ def _parse_questions(raw: list[dict[str, Any]]) -> tuple[QuestionSpec, ...]:
                 marking_mode=marking_mode,
                 match_rules=match_rules,
                 code_marking=code_marking,
+                benchmark_points=benchmark_points,
                 rubric_file=rubric_file,
             )
         )

@@ -1,0 +1,6 @@
+order_id,region,status,order_value
+O-001,EMEA,closed,1200
+O-002,EMEA,closed,810
+O-003,AMER,closed,1500
+O-005,APAC,open,2000
+O-008,AMER,closed,1285

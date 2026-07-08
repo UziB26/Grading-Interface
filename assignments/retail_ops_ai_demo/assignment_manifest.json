@@ -1,0 +1,143 @@
+{
+  "assignment_id": "retail_ops_ai_demo",
+  "title": "Retail Ops AI Demo Assignment",
+  "version": "1.0",
+  "benchmark_dir": "benchmark_files_retail_ai_demo",
+  "submissions_dir": "student_submissions_retail_ai_demo",
+  "reports_dir": "outputs/grading_reports_retail_ai_demo",
+  "allowed_extensions": [".csv", ".md", ".sql", ".xml", ".xsl", ".xslt", ".txt", ".zip"],
+  "questions": [
+    {
+      "id": "q1",
+      "label": "Cleaned Orders Output",
+      "max_mark": 25,
+      "marking_mode": "output_match",
+      "compare_mode": "csv",
+      "match_rules": {
+        "numeric_tolerance_pct": 0.5,
+        "require_column_names": true,
+        "ignore_row_order": true
+      },
+      "files": [
+        {
+          "benchmark": "cleaned_orders.csv",
+          "seed_from": "test_uploads/retail_ops_ai_demo/benchmarks/q1/cleaned_orders.csv"
+        }
+      ]
+    },
+    {
+      "id": "q2",
+      "label": "Executive Retail Brief",
+      "max_mark": 20,
+      "marking_mode": "semantic_text",
+      "compare_mode": "text",
+      "benchmark_points": "- Explain overall order trend in the period.\n- Identify top-performing region and support with evidence.\n- Mention high-value order behavior.\n- Provide one concrete action recommendation for operations.",
+      "files": [
+        {
+          "benchmark": "executive_brief.md",
+          "seed_from": "test_uploads/retail_ops_ai_demo/benchmarks/q2/executive_brief.md"
+        }
+      ]
+    },
+    {
+      "id": "q3",
+      "label": "Regional KPI SQL",
+      "max_mark": 30,
+      "marking_mode": "semantic_code",
+      "compare_mode": "code",
+      "code_marking": {
+        "weights": { "correctness": 0.7, "practice": 0.3 },
+        "correctness": {
+          "method": "output_execution",
+          "rules_from_code_checks": false,
+          "execution": {
+            "engine": "sqlite",
+            "fixtures": [
+              {
+                "table": "orders_fact",
+                "path": "test_uploads/retail_ops_ai_demo/fixtures/orders_fact.csv"
+              }
+            ],
+            "ignore_row_order": true,
+            "numeric_tolerance_pct": 0.0
+          }
+        },
+        "practice": {
+          "method": "hybrid",
+          "rules_weight": 0.5,
+          "ai_weight": 0.5,
+          "checks": ["comments", "no_select_star", "uses_aliases", "reasonable_length"]
+        }
+      },
+      "files": [
+        {
+          "benchmark": "regional_kpi.sql",
+          "seed_from": "test_uploads/retail_ops_ai_demo/benchmarks/q3/regional_kpi.sql"
+        }
+      ]
+    },
+    {
+      "id": "q4",
+      "label": "Order XML Transform",
+      "max_mark": 25,
+      "marking_mode": "mixed",
+      "compare_mode": "mixed",
+      "code_marking": {
+        "weights": { "correctness": 0.7, "practice": 0.3 },
+        "correctness": {
+          "method": "output_execution",
+          "rules_from_code_checks": false,
+          "execution": {
+            "engine": "xslt",
+            "input_path": "test_uploads/retail_ops_ai_demo/fixtures/orders_input.xml"
+          }
+        },
+        "practice": {
+          "method": "hybrid",
+          "rules_weight": 0.5,
+          "ai_weight": 0.5,
+          "checks": ["comments", "reasonable_length"]
+        }
+      },
+      "files": [
+        {
+          "benchmark": "order_transform.xsl",
+          "seed_from": "test_uploads/retail_ops_ai_demo/benchmarks/q4/order_transform.xsl"
+        },
+        {
+          "benchmark": "orders_output.xml",
+          "seed_from": "test_uploads/retail_ops_ai_demo/benchmarks/q4/orders_output.xml"
+        }
+      ]
+    }
+  ],
+  "submission_aliases": {
+    "cleaned_orders.csv": ["cleaned_orders.csv", "q1_cleaned_orders.csv"],
+    "executive_brief.md": ["executive_brief.md", "q2_brief.md"],
+    "regional_kpi.sql": ["regional_kpi.sql", "q3_query.sql"],
+    "order_transform.xsl": ["order_transform.xsl", "order_transform.xslt", "q4_transform.xsl"],
+    "orders_output.xml": ["orders_output.xml", "q4_output.xml"]
+  },
+  "code_checks": {
+    ".sql": {
+      "engine": "regex",
+      "rules": [
+        {"label": "uses grouping", "pattern": "GROUP\\s+BY"},
+        {"label": "uses case aggregation", "pattern": "CASE\\s+WHEN"},
+        {"label": "uses date filter", "pattern": "order_date"}
+      ]
+    },
+    ".xsl": {
+      "engine": "regex",
+      "rules": [
+        {"label": "has template", "pattern": "xsl:template"},
+        {"label": "maps id", "pattern": "value-of select=\"@id\"|value-of select='@id'"},
+        {"label": "maps segment", "pattern": "segment|band"}
+      ]
+    },
+    ".xslt": {
+      "engine": "regex",
+      "inherit_from": ".xsl"
+    }
+  }
+}

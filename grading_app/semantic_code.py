@@ -14,6 +14,7 @@ from lxml import etree
 from grading_app.ast_checks import build_python_ast_profile, evaluate_ast_rule
 from grading_app.code_checks import run_regex_rules
 from grading_app.manifest import AssignmentManifest, ROOT, CodeExecutionSpec, QuestionSpec, StructureRule
+from grading_app.ai_evaluator import evaluate_with_ai
 
 
 @dataclass
@@ -28,6 +29,7 @@ class SemanticCodeScore:
     correctness_details: str
     practice_details: str
     correctness_method: str
+    practice_method: str
 
 
 def _default_practice_checks(suffix: str) -> tuple[str, ...]:
@@ -190,6 +192,64 @@ def _score_practice(path: Path, checks: tuple[str, ...]) -> tuple[float, int, in
     return score, len(passed), total, details
 
 
+def _score_practice_ai(submitted: Path, benchmark: Path | None) -> tuple[float, str]:
+    student_code = submitted.read_text(encoding="utf-8", errors="ignore")
+    benchmark_code = (
+        benchmark.read_text(encoding="utf-8", errors="ignore") if benchmark and benchmark.exists() else ""
+    )
+    language = submitted.suffix.lower().lstrip(".") or "code"
+    prompt = (
+        f"[LANGUAGE]\n{language}\n\n"
+        f"[BENCHMARK CODE]\n{benchmark_code or '(not provided)'}\n\n"
+        f"[STUDENT CODE]\n{student_code}"
+    )
+    system_instruction = (
+        "You grade coding practice/quality only (not functional correctness). "
+        "Score from 0.0 to 1.0 based on clarity, comments/explanation, structure, "
+        "naming, and reasonable efficiency. Keep feedback brief."
+    )
+    result = evaluate_with_ai(prompt, system_instruction)
+    return result.score, result.feedback
+
+
+def _score_practice_hybrid(
+    submitted: Path,
+    question: QuestionSpec,
+    benchmark: Path | None,
+) -> tuple[float, int, int, str, str]:
+    checks = _resolve_practice_checks(submitted, question)
+    rules_score, passed, total, rules_details = _score_practice(submitted, checks)
+    practice_cfg = question.code_marking.practice if question.code_marking else None
+    method = practice_cfg.method if practice_cfg else "rules"
+
+    if method == "rules":
+        return rules_score, passed, total, rules_details, "rules"
+
+    if method == "ai":
+        try:
+            ai_score, ai_feedback = _score_practice_ai(submitted, benchmark)
+            details = f"Practice AI: {ai_feedback}"
+            return ai_score, 1 if ai_score >= 0.5 else 0, 1, details, "ai"
+        except Exception as exc:  # noqa: BLE001
+            details = f"{rules_details}; AI practice unavailable: {exc}"
+            return rules_score, passed, total, details, "rules-fallback"
+
+    # hybrid
+    rules_weight = practice_cfg.rules_weight if practice_cfg else 0.5
+    ai_weight = practice_cfg.ai_weight if practice_cfg else 0.5
+    try:
+        ai_score, ai_feedback = _score_practice_ai(submitted, benchmark)
+        combined = rules_score * rules_weight + ai_score * ai_weight
+        details = (
+            f"Practice hybrid (rules {rules_weight:.0%}/AI {ai_weight:.0%}): "
+            f"rules={rules_score:.2f}; AI={ai_score:.2f}; {rules_details}; AI feedback: {ai_feedback}"
+        )
+        return combined, passed, total, details, "hybrid"
+    except Exception as exc:  # noqa: BLE001
+        details = f"{rules_details}; AI practice unavailable (used rules only): {exc}"
+        return rules_score, passed, total, details, "rules-fallback"
+
+
 def _normalize_sql_for_sqlite(sql_text: str) -> str:
     # Accept common Postgres-style date literals in SQLite fixtures.
     return re.sub(r"DATE\s*'([^']+)'", r"'\1'", sql_text, flags=re.IGNORECASE)
@@ -340,7 +400,6 @@ def grade_semantic_code(
 ) -> SemanticCodeScore:
     """Score student code on correctness (behaviour rules) and practice heuristics."""
     rules = _resolve_correctness_rules(submitted, question, manifest)
-    practice_checks = _resolve_practice_checks(submitted, question)
     correctness_weight, practice_weight = _resolve_weights(question)
 
     spec = question.code_marking
@@ -366,8 +425,8 @@ def grade_semantic_code(
             submitted, rules
         )
 
-    practice, practice_passed, practice_total, practice_details = _score_practice(
-        submitted, practice_checks
+    practice, practice_passed, practice_total, practice_details, practice_method = _score_practice_hybrid(
+        submitted, question, benchmark
     )
     combined = correctness * correctness_weight + practice * practice_weight
 
@@ -382,4 +441,5 @@ def grade_semantic_code(
         correctness_details=correctness_details,
         practice_details=practice_details,
         correctness_method=correctness_method,
+        practice_method=practice_method,
     )

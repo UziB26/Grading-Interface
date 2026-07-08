@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<orders>
+  <order id="O-001">
+    <region>EMEA</region>
+    <value>1200</value>
+    <status>closed</status>
+  </order>
+  <order id="O-003">
+    <region>AMER</region>
+    <value>1500</value>
+    <status>closed</status>
+  </order>
+  <order id="O-006">
+    <region>APAC</region>
+    <value>950</value>
+    <status>closed</status>
+  </order>
+</orders>

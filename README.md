@@ -171,7 +171,12 @@ mark = (correctness × 0.7 + practice × 0.3) × max_mark
 - Rules from `code_marking.correctness.rules`, or
 - Inherited from manifest `code_checks` for that file type (e.g. `.sql` regex rules)
 
-**Practice** — static coding quality checks:
+**Practice** — coding quality, configurable via `code_marking.practice.method`:
+- `rules` (default) — static checks only
+- `ai` — Gemini rates clarity/structure/comments (falls back to rules if AI fails)
+- `hybrid` — blends rules + AI using `rules_weight` / `ai_weight` (default 50/50)
+
+Static checks (used by `rules` and the rules half of `hybrid`):
 - `comments` — has explanatory comments
 - `no_select_star` — SQL does not use `SELECT *`
 - `uses_aliases` — SQL uses `AS` column aliases
@@ -192,6 +197,9 @@ Example manifest snippet:
       "rules_from_code_checks": true
     },
     "practice": {
+      "method": "hybrid",
+      "rules_weight": 0.5,
+      "ai_weight": 0.5,
       "checks": ["comments", "no_select_star", "uses_aliases", "reasonable_length"]
     }
   },

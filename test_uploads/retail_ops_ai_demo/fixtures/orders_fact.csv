@@ -1,0 +1,9 @@
+order_id,region,order_value,order_date,status
+O-001,EMEA,1200,2026-01-10,closed
+O-002,EMEA,800,2026-01-12,closed
+O-003,AMER,1500,2026-02-02,closed
+O-004,AMER,400,2026-02-06,cancelled
+O-005,APAC,2000,2026-02-14,closed
+O-006,APAC,950,2026-03-02,closed
+O-007,EMEA,1700,2026-03-11,closed
+O-008,AMER,1300,2026-03-22,closed

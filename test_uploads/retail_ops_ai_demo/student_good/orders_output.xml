@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<orders_report>
+  <order>
+    <id>O-001</id>
+    <region>EMEA</region>
+    <segment>high</segment>
+    <status>closed</status>
+  </order>
+  <order>
+    <id>O-003</id>
+    <region>AMER</region>
+    <segment>high</segment>
+    <status>closed</status>
+  </order>
+  <order>
+    <id>O-006</id>
+    <region>APAC</region>
+    <segment>standard</segment>
+    <status>closed</status>
+  </order>
+</orders_report>

@@ -155,7 +155,13 @@ If `correctness.method = "output_execution"`:
 
 ### 4.2 Practice component
 
-Practice checks are static heuristics.
+Practice scoring method is configured under `code_marking.practice.method`:
+
+| Method | Behaviour |
+|--------|-----------|
+| `rules` (default) | Static heuristics only |
+| `ai` | Gemini grades clarity/structure/comments only; falls back to rules if AI fails |
+| `hybrid` | Blends rules + AI using `rules_weight` / `ai_weight` (default 50/50); falls back to rules if AI fails |
 
 Default checks by suffix:
 - `.sql`: `comments`, `no_select_star`, `uses_aliases`, `reasonable_length`
@@ -168,14 +174,19 @@ Available practice checks:
 - `reasonable_length`
 - `no_hardcoded_values` (SQL-focused heuristic)
 
-Practice score:
+Rules practice score:
 - `passed_checks / total_checks`
+
+Hybrid practice score:
+- `rules_score * rules_weight + ai_score * ai_weight`
 
 ### 4.3 Result fields for `semantic_code`
 
 - `marking_mode`: `semantic_code`
-- `correctness_score`: behavior/rule score
-- `practice_score`: practice heuristic score
+- `correctness_score`: behavior/rule or execution score
+- `practice_score`: practice score (rules / AI / hybrid)
+- `correctness_method`: `execution-based` or `rule-based`
+- `practice_method`: `rules`, `ai`, `hybrid`, or `rules-fallback`
 - `similarity`: weighted combined score
 - `notes`: concatenated correctness and practice details
 
@@ -290,6 +301,9 @@ Avoid `text_rubric` until implemented.
       "rules_from_code_checks": true
     },
     "practice": {
+      "method": "hybrid",
+      "rules_weight": 0.5,
+      "ai_weight": 0.5,
       "checks": ["comments", "no_select_star", "uses_aliases", "reasonable_length"]
     }
   },

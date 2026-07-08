@@ -14,6 +14,7 @@ import pandas as pd
 
 from grading_app.code_checks import analyze_file_with_manifest
 from grading_app.config import ROOT, get_manifest
+from grading_app.ai_evaluator import evaluate_with_ai
 from grading_app.manifest import QuestionSpec, marking_mode_for_file
 from grading_app.semantic_code import grade_semantic_code
 
@@ -31,6 +32,7 @@ class GradeResult:
     correctness_score: float | None
     practice_score: float | None
     correctness_method: str | None
+    practice_method: str | None
     mark: float
     max_mark: float
     notes: str
@@ -316,7 +318,7 @@ def grade_file_item(
             semantic = grade_semantic_code(submitted, question, manifest, benchmark)
             method_label = semantic.correctness_method
             notes = (
-                f"Correctness mode: {method_label}; "
+                f"Correctness mode: {method_label}; Practice mode: {semantic.practice_method}; "
                 f"{semantic.correctness_details}; {semantic.practice_details}"
             )
             return GradeResult(
@@ -326,6 +328,7 @@ def grade_file_item(
                 correctness_score=semantic.correctness,
                 practice_score=semantic.practice,
                 correctness_method=method_label,
+                practice_method=semantic.practice_method,
                 mark=round(semantic.combined * max_mark, 2),
                 notes=notes,
             )
@@ -337,8 +340,52 @@ def grade_file_item(
                 correctness_score=0.0,
                 practice_score=0.0,
                 correctness_method=None,
+                practice_method=None,
                 mark=0.0,
                 notes=f"Semantic grading failed: {exc}",
+            )
+
+    if marking_mode == "semantic_text":
+        student_text = read_text(submitted)
+        benchmark_text = read_text(benchmark)
+        target_points = (
+            question.benchmark_points.strip() if question.benchmark_points else benchmark_text
+        )
+        prompt = (
+            f"[TARGET POINTS]\n{target_points}\n\n"
+            f"[BENCHMARK ANSWER]\n{benchmark_text}\n\n"
+            f"[STUDENT SUBMISSION]\n{student_text}"
+        )
+        system_instruction = (
+            "You are grading semantic coverage. Score from 0.0 to 1.0 based on whether "
+            "the student covered the key target points, regardless of exact wording."
+        )
+        try:
+            ai_result = evaluate_with_ai(prompt, system_instruction)
+            return GradeResult(
+                **base,
+                status="graded",
+                similarity=ai_result.score,
+                correctness_score=ai_result.score,
+                practice_score=None,
+                correctness_method="ai-semantic",
+                practice_method=None,
+                mark=round(ai_result.score * max_mark, 2),
+                notes=f"Correctness mode: ai-semantic; {ai_result.feedback}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Safe fallback: keep grading deterministic if API isn't available.
+            fallback = text_similarity(benchmark, submitted)
+            return GradeResult(
+                **base,
+                status="graded",
+                similarity=round(fallback, 4),
+                correctness_score=round(fallback, 4),
+                practice_score=None,
+                correctness_method="fallback-text",
+                practice_method=None,
+                mark=round(fallback * max_mark, 2),
+                notes=f"Correctness mode: fallback-text; AI unavailable: {exc}",
             )
 
     if marking_mode == "text_rubric":
@@ -349,6 +396,7 @@ def grade_file_item(
             correctness_score=None,
             practice_score=None,
             correctness_method=None,
+            practice_method=None,
             mark=0.0,
             notes="Rubric text grading not yet implemented; configure legacy_text or add rubric_file",
         )
@@ -375,6 +423,7 @@ def grade_file_item(
             correctness_score=round(score, 4),
             practice_score=None,
             correctness_method="output-match" if marking_mode == "output_match" else None,
+            practice_method=None,
             mark=round(score * max_mark, 2),
             notes=notes,
         )
@@ -386,6 +435,7 @@ def grade_file_item(
             correctness_score=0.0,
             practice_score=None,
             correctness_method=None,
+            practice_method=None,
             mark=0.0,
             notes=f"Missing: {benchmark_name} ({exc})",
         )
@@ -397,6 +447,7 @@ def grade_file_item(
             correctness_score=0.0,
             practice_score=None,
             correctness_method=None,
+            practice_method=None,
             mark=0.0,
             notes=f"Comparison failed: {exc}",
         )
@@ -441,6 +492,7 @@ def grade_student(student_dir: Path, mark_scale: float = 1.0) -> list[GradeResul
                         correctness_score=0.0,
                         practice_score=None,
                         correctness_method=None,
+                        practice_method=None,
                         mark=0.0,
                         max_mark=file_max_mark,
                         notes=f"Missing: {benchmark_name}",
@@ -462,6 +514,7 @@ def grade_student(student_dir: Path, mark_scale: float = 1.0) -> list[GradeResul
                         correctness_score=0.0,
                         practice_score=None,
                         correctness_method=None,
+                        practice_method=None,
                         mark=0.0,
                         max_mark=file_max_mark,
                         notes=f"Missing: {benchmark_name}",

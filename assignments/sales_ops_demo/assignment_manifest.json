@@ -24,8 +24,9 @@
       "id": "q2",
       "label": "Campaign Performance Summary",
       "max_mark": 20,
-      "marking_mode": "legacy_text",
+      "marking_mode": "semantic_text",
       "compare_mode": "text",
+      "benchmark_points": "- Mention campaign conversion trend.\n- Identify strongest region performance.\n- Include key metrics: leads processed, closed-won, and win rate.\n- Provide an actionable recommendation.",
       "files": [{"benchmark": "campaign_summary.md", "seed_from": "test_uploads/sales_ops_demo/benchmarks/q2/campaign_summary.md"}]
     },
     {
@@ -52,6 +53,9 @@
           }
         },
         "practice": {
+          "method": "hybrid",
+          "rules_weight": 0.5,
+          "ai_weight": 0.5,
           "checks": ["comments", "no_select_star", "uses_aliases", "reasonable_length"]
         }
       },
@@ -74,6 +78,9 @@
           }
         },
         "practice": {
+          "method": "hybrid",
+          "rules_weight": 0.5,
+          "ai_weight": 0.5,
           "checks": ["comments", "reasonable_length"]
         }
       },
