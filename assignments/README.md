@@ -1,67 +1,119 @@
 # Assignments
 
-Each assignment is defined by a manifest JSON file. The grading app loads the active manifest at runtime — no Python code changes are required for a new assignment.
+Assignments are fully manifest-driven. Add or update `assignment_manifest.json` files under `assignments/` and activate one at runtime.
 
 ## Layout
 
 ```text
 assignments/
-  technical_assignment_2024/
-    assignment_manifest.json    # Questions, marks, aliases, code-check rules
+  <assignment_name>/
+    assignment_manifest.json
 grading_app/
-  active_assignment.json        # Points to the manifest in use
-benchmark_files/                # Solution files (path configurable in manifest)
+  active_assignment.json
 ```
 
-## Switching assignments
+## Activate assignment
 
-**Option A — edit `grading_app/active_assignment.json`:**
+### Option A: `active_assignment.json`
 
 ```json
 {
-  "manifest_path": "assignments/your_new_assignment/assignment_manifest.json"
+  "manifest_path": "assignments/your_assignment/assignment_manifest.json"
 }
 ```
 
-**Option B — environment variable:**
+### Option B: env var
 
 ```powershell
-$env:GRADING_MANIFEST_PATH = "assignments/your_new_assignment/assignment_manifest.json"
+$env:GRADING_MANIFEST_PATH = "assignments/your_assignment/assignment_manifest.json"
 python grading_app\app.py
 ```
 
-## Creating a new manifest
+## Manifest essentials
 
-Copy `technical_assignment_2024/assignment_manifest.json` as a template and update:
+Top-level fields to define:
+- `assignment_id`, `title`, `version`
+- `benchmark_dir`, `submissions_dir`, `reports_dir`
+- `allowed_extensions`
+- `questions`
+- `submission_aliases`
+- `code_checks`
 
-| Section | Purpose |
-|---------|---------|
-| `questions` | Question id, label, max marks, compare mode, benchmark file names |
-| `submission_aliases` | Alternate filenames students may submit |
-| `code_checks` | Per-extension AST or regex rules |
-| `allowed_extensions` | Upload whitelist |
-| `benchmark_dir` | Where solution files live |
+## Question-level fields
 
-### Compare modes
+- `id`, `label`, `max_mark`
+- `marking_mode` (recommended explicit)
+- `compare_mode` (legacy/inference support)
+- `files` with `benchmark` and optional `seed_from`
+- optional `match_rules`
+- optional `code_marking`
+- optional `benchmark_points` (for `semantic_text`)
 
-`text`, `csv`, `xml`, `image`, `code`, or `mixed` (per-file suffix in mixed questions).
+## Marking modes
 
-### Code-check rule types (AST engine)
+- `output_match`: CSV/XML/image output comparison
+- `semantic_code`: weighted correctness + practice
+- `semantic_text`: Gemini semantic point coverage for prose
+- `legacy_text`: deterministic text similarity
+- `mixed`: per-file dispatch
+- `text_rubric`: schema-only, not production-ready
 
-| `type` | Manifest fields | Checks for |
-|--------|-----------------|------------|
-| `import_module` | `modules` | `import pandas` / `from pandas` |
-| `token_match` | `tokens` | Names, attributes, strings, calls across the AST |
-| `name` | `names` | Variable names |
-| `function_name` | `names` | Defined functions |
-| `call_name` | `names` | Function/method calls |
-| `attribute` | `names` | Attribute access |
-| `string_contains` | `tokens` | Substrings in string literals |
+## `code_marking` structure
 
-### Code-check rules (regex engine)
+- `weights`: correctness/practice split
+- `correctness.method`: `behavior_rules` or `output_execution`
+- `correctness.execution.engine`: `sqlite` or `xslt`
+- `practice.method`: `rules`, `ai`, or `hybrid`
+- `practice.checks`: optional explicit check list
+- `practice.rules_weight` / `practice.ai_weight` for hybrid
+
+## Minimal examples
+
+### `semantic_text`
 
 ```json
-{"label": "uses distinct count", "pattern": "COUNT\\s*\\(\\s*DISTINCT"}
+{
+  "id": "q2",
+  "marking_mode": "semantic_text",
+  "compare_mode": "text",
+  "benchmark_points": "1) Root cause\n2) Evidence\n3) Recommendation",
+  "files": [{ "benchmark": "executive_brief.md" }]
+}
 ```
 
-Use `inherit_from` to share rules between extensions (e.g. `.xslt` inheriting `.xsl`).
+### `semantic_code` with SQL execution + hybrid practice
+
+```json
+{
+  "id": "q3",
+  "marking_mode": "semantic_code",
+  "compare_mode": "code",
+  "code_marking": {
+    "weights": { "correctness": 0.7, "practice": 0.3 },
+    "correctness": {
+      "method": "output_execution",
+      "execution": {
+        "engine": "sqlite",
+        "fixtures": [
+          { "table": "orders_fact", "path": "path/to/orders_fact.csv" }
+        ]
+      }
+    },
+    "practice": {
+      "method": "hybrid",
+      "rules_weight": 0.5,
+      "ai_weight": 0.5
+    }
+  },
+  "files": [{ "benchmark": "regional_kpi.sql" }]
+}
+```
+
+## Code checks
+
+`code_checks` define reusable suffix-level rules using:
+- `engine: ast`
+- `engine: regex`
+- optional `inherit_from`
+
+These can be inherited into `semantic_code` correctness when `rules_from_code_checks` is true.

@@ -1,338 +1,220 @@
 # Marking Modes Explained (Detailed)
 
-This document explains exactly how grading works for each marking mode in the current engine implementation (`1.1-semantic`).
+This document describes exactly how scoring works in the current grading engine.
 
-It describes:
-- what each mode is for
-- how scores are calculated
-- which manifest settings control behavior
-- current limitations and edge cases
+It covers:
+- mode resolution
+- score formulas
+- manifest controls
+- AI fallback behavior
+- known limits
 
----
+## 1) Marking mode resolution
 
-## 1) Where Marking Mode Comes From
+Per question, use explicit `marking_mode` whenever possible.
 
-Each question in an assignment manifest can define:
-- `marking_mode` (preferred, explicit)
-- `compare_mode` (legacy comparer type)
+Supported modes:
+- `output_match`
+- `semantic_code`
+- `semantic_text`
+- `legacy_text`
+- `mixed`
+- `text_rubric` (schema only, not production-ready)
 
-If `marking_mode` is omitted, it is inferred from `compare_mode`:
+If omitted, mode is inferred from `compare_mode`:
 - `csv`, `xml`, `image` -> `output_match`
 - `code` -> `semantic_code`
 - `text` -> `legacy_text`
 - `mixed` -> `mixed`
 
-For `mixed`, the app resolves mode per file suffix:
+For `mixed`, mode is resolved per file suffix:
 - `.csv`, `.xml`, `.png` -> `output_match`
 - `.sql`, `.xsl`, `.xslt`, `.py` -> `semantic_code`
-- anything else -> `legacy_text`
+- otherwise -> `legacy_text`
 
----
+## 2) Global scoring pipeline
 
-## 2) Scoring Pipeline (All Modes)
+For each student and expected benchmark file:
+1. Find submission using benchmark filename + aliases.
+2. Resolve marking mode.
+3. Compute score in `[0,1]`.
+4. Convert to marks: `mark = score * per_file_max_mark`.
 
-For each student:
-1. For each question, load benchmark file(s).
-2. Find matching submitted file using alias map + suffix.
-3. Resolve marking mode for that file.
-4. Score according to that mode.
-5. Convert score to marks with:
+Multi-file questions split marks evenly across files (rounding remainder is applied to last file).
 
-`mark = score * per_file_max_mark`
+Status behavior:
+- `graded`: normal result
+- `missing`: file not found; score `0`
+- `error`: grading failure; score `0`
 
-If a question has multiple files, its question max is split evenly across files (with any rounding remainder added to the last file).
+## 3) `output_match`
 
-Missing file behavior:
-- status = `missing`
-- score = `0`
-- mark = `0`
+Use for deterministic artifacts where output values/structure matter.
 
-Error behavior:
-- status = `error`
-- score = `0`
-- mark = `0`
-- details in `notes`
+### 3.1 CSV
 
----
+Weighted score:
+- 20% column compatibility
+- 20% row count compatibility
+- 60% value similarity
 
-## 3) Mode: `output_match`
-
-Use this for output artifacts where values/structure matter more than wording:
-- CSV data outputs
-- XML outputs
-- images
-
-The system compares benchmark vs submission using file-aware logic.
-
-### 3.1 CSV comparison
-
-CSV score is a weighted combination:
-- **20%** column compatibility
-- **20%** row-count compatibility
-- **60%** value similarity
-
-Details:
-- Reads both CSVs as strings (preserves values robustly).
-- If columns differ, compares overlapping columns only.
-- Numeric cells use tolerance:
-  - tolerance = `abs(benchmark_value) * (numeric_tolerance_pct / 100)`
-  - lower bounded by `1.0` in denominator logic already used by the code
-- Non-numeric cells compare normalized text similarity.
-- Optional row-order ignore via `match_rules.ignore_row_order` (default `true`).
-
-Config knobs (`match_rules`):
+`match_rules` options:
 - `numeric_tolerance_pct` (default `1.0`)
 - `ignore_row_order` (default `true`)
-- `require_column_names` (currently parsed, not enforced in grading logic yet)
+- `require_column_names` (parsed but not currently enforced)
 
-### 3.2 XML comparison
+### 3.2 XML
 
-XML is parsed and normalized into a structural text walk:
-- local tag names
-- sorted attributes
-- trimmed node text
+- Parse and normalize structure/text
+- Compare normalized representation
+- Fallback to normalized text compare on parse failure
 
-Then similarity is computed via sequence matching on normalized structure.
+### 3.3 Image
 
-If XML parsing fails, it falls back to normalized text comparison.
+- Exact binary match `1.0`, else `0.0`
 
-### 3.3 Image comparison
+Result shape:
+- `correctness_score` populated
+- `practice_score` null
+- `correctness_method` often `output-match`
 
-Binary compare:
-- exact byte match -> `1.0`
-- otherwise -> `0.0`
+## 4) `semantic_code`
 
-### 3.4 Result fields for `output_match`
+Use where different implementations can still be correct.
 
-- `marking_mode`: `output_match`
-- `correctness_score`: populated (same as combined score)
-- `practice_score`: `null`
-- `similarity`: combined score shown in UI
-- `notes`: comparison details (e.g., row mismatch, XML compared)
+Formula:
 
----
+```text
+combined = correctness * correctness_weight + practice * practice_weight
+```
 
-## 4) Mode: `semantic_code`
-
-Use this for code submissions where different implementations can still be correct.
-
-Final semantic score:
-
-`combined = correctness * correctness_weight + practice * practice_weight`
-
-Default weights:
-- correctness = `0.7`
-- practice = `0.3`
-
-If custom weights are provided, they are normalized to sum to 1.
+Default weights: correctness `0.7`, practice `0.3`.
+Custom weights are normalized to sum to 1.
 
 ### 4.1 Correctness component
 
-Correctness is rule-based (behavior rules), not text-sim.
+Configured by `code_marking.correctness.method`:
 
+#### A) `behavior_rules`
 Rule source priority:
-1. `question.code_marking.correctness.rules` (if provided)
-2. manifest `code_checks` rules for that file suffix (if `rules_from_code_checks=true`)
+1. `question.code_marking.correctness.rules`
+2. manifest-level `code_checks` for suffix (if `rules_from_code_checks=true`)
 3. no rules -> correctness defaults to `1.0`
 
-Rule execution:
-- `.py`: AST profile + AST rule evaluation
-- non-`.py` code (`.sql`, `.xsl`, `.xslt`, etc.): regex rule evaluation
+Evaluation:
+- `.py` -> AST profile/rule checks
+- non-`.py` -> regex-based rule checks
 
-Score:
-- `passed_rules / total_rules`
+#### B) `output_execution`
+Currently supported engines:
+- `sqlite` (SQL)
+- `xslt` (XSL/XSLT)
 
-If `.py` has syntax error:
-- correctness = `0.0`
-- details include syntax error
+SQL execution behavior:
+- Load fixtures into SQLite tables
+- Execute benchmark SQL and student SQL
+- Compare resulting DataFrames by columns/rows/values
 
-If `correctness.method = "output_execution"`:
-- SQL can be executed against SQLite fixtures and compared to benchmark-query output
-- XSLT can be executed against a fixture XML input and compared to benchmark-transform output
-- currently supported engines: `sqlite`, `xslt`
-- output is compared by columns + rows + values (SQL) or normalized XML similarity (XSLT)
-- if execution profile is missing/unsupported, correctness is `0.0` with explanatory notes
+XSLT execution behavior:
+- Apply benchmark and student transforms to fixture XML
+- Compare normalized output similarity
+
+If execution config is missing/invalid, correctness becomes `0.0` with explanation in notes.
 
 ### 4.2 Practice component
 
-Practice scoring method is configured under `code_marking.practice.method`:
+Configured by `code_marking.practice.method`:
 
-| Method | Behaviour |
-|--------|-----------|
-| `rules` (default) | Static heuristics only |
-| `ai` | Gemini grades clarity/structure/comments only; falls back to rules if AI fails |
-| `hybrid` | Blends rules + AI using `rules_weight` / `ai_weight` (default 50/50); falls back to rules if AI fails |
+- `rules`: static checks only
+- `ai`: Gemini-only quality score, fallback to rules on failure
+- `hybrid`: weighted blend of rules + AI, fallback to rules on failure
 
-Default checks by suffix:
-- `.sql`: `comments`, `no_select_star`, `uses_aliases`, `reasonable_length`
-- `.py`, `.xsl`, `.xslt`: `comments`, `reasonable_length`
-
-Available practice checks:
+Practice checks available:
 - `comments`
 - `no_select_star`
 - `uses_aliases`
 - `reasonable_length`
-- `no_hardcoded_values` (SQL-focused heuristic)
+- `no_hardcoded_values`
 
-Rules practice score:
-- `passed_checks / total_checks`
+Default checks by suffix:
+- `.sql`: comments, no_select_star, uses_aliases, reasonable_length
+- `.py`, `.xsl`, `.xslt`: comments, reasonable_length
 
-Hybrid practice score:
-- `rules_score * rules_weight + ai_score * ai_weight`
+Hybrid formula:
 
-### 4.3 Result fields for `semantic_code`
+```text
+practice = rules_score * rules_weight + ai_score * ai_weight
+```
 
-- `marking_mode`: `semantic_code`
-- `correctness_score`: behavior/rule or execution score
-- `practice_score`: practice score (rules / AI / hybrid)
-- `correctness_method`: `execution-based` or `rule-based`
-- `practice_method`: `rules`, `ai`, `hybrid`, or `rules-fallback`
+### 4.3 Result fields
+
+- `correctness_score`: correctness component
+- `practice_score`: practice component
 - `similarity`: weighted combined score
-- `notes`: concatenated correctness and practice details
+- `correctness_method`: `rule-based` or `execution-based`
+- `practice_method`: `rules`, `ai`, `hybrid`, or `rules-fallback`
 
----
+## 5) `semantic_text`
 
-## 5) Mode: `legacy_text`
+Use for prose answers where semantic coverage is required.
 
-Use this for current text-based marking where no rubric mode is set yet.
+Behavior:
+- Build prompt with `benchmark_points` (preferred), benchmark text, and student text
+- Gemini returns structured `score` + `feedback`
+- Result uses `correctness_method = ai-semantic`
+
+Fallback:
+- On AI failure (missing key, auth, quota, request error), falls back to normalized text similarity
+- Fallback label: `correctness_method = fallback-text`
+
+## 6) `legacy_text`
+
+Normalized text similarity mode.
 
 Normalization:
-- strip whitespace per line
-- drop empty lines
-- compare normalized text with sequence matching
+- trim line whitespace
+- remove empty lines
+- sequence similarity on normalized content
 
-Score:
-- similarity in `[0.0, 1.0]`
+Use as deterministic backup when semantic AI is unavailable.
 
-Result fields:
-- `correctness_score` = similarity
-- `practice_score` = `null`
+## 7) `mixed`
 
-This mode is sensitive to wording and ordering (even if meaning is close).
+Dispatcher mode for multi-file questions.
 
----
+Each file gets its own derived mode based on suffix and is scored independently.
+Per-file marks sum into the question total.
 
-## 6) Mode: `text_rubric`
+## 8) `text_rubric`
 
-This mode exists in manifest/schema but is **not implemented yet** in grader logic.
+Available in schema but not implemented for production scoring yet.
+Current behavior returns zero score with explanatory notes.
 
-Current behavior:
-- status is marked `graded`
-- score = `0.0`
-- mark = `0.0`
-- notes indicate rubric grading is not implemented
+## 9) Gemini integration behavior
 
-Do not enable this mode for production grading until rubric evaluator is added.
+Environment variables:
+- `GEMINI_API_KEY` (required for AI paths)
+- `GEMINI_MODEL` (optional; default `gemini-2.5-flash-lite`)
 
----
+Runtime details:
+- `.env` is loaded from project root with override enabled
+- API key is read each call
+- short retry on rate-limit style failures
 
-## 7) Mode: `mixed`
+Fallback safety guarantees:
+- `semantic_text` -> `fallback-text`
+- practice `ai`/`hybrid` -> `rules-fallback`
 
-`mixed` is a dispatcher, not a scorer itself.
+## 10) Recommended mode selection
 
-For each file in the question:
-- resolve file suffix
-- map to one of:
-  - `output_match`
-  - `semantic_code`
-  - `legacy_text`
+- CSV/XML/image outputs -> `output_match`
+- SQL/XSL/Python tasks -> `semantic_code`
+- Prose with required key points -> `semantic_text`
+- Legacy prose only -> `legacy_text`
+- Transform + artifact mixed questions -> `mixed`
 
-Marks are computed per file and summed into question/student totals.
+## 11) Known gaps
 
----
-
-## 8) Student Summary Metrics
-
-After all file-level results are computed:
-- `total_mark` = sum of awarded marks
-- `total_max` = sum of file max marks
-- `percentage` = `(total_mark / total_max) * 100`
-- `avg_correctness` = average of non-null `correctness_score`
-- `avg_practice` = average of non-null `practice_score`
-- `missing_files` = comma-separated benchmark names with status `missing`
-
-`code_structure_avg` is also reported separately from `code_checks.csv` and is independent of the semantic combined score.
-
----
-
-## 9) Recommended Usage by Question Type
-
-- Data tables / deterministic outputs -> `output_match`
-- SQL/XSL/Python where equivalent solutions are valid -> `semantic_code`
-- Written prose currently -> `legacy_text`
-- Hybrid question with transform + output artifacts -> `mixed`
-
-Avoid `text_rubric` until implemented.
-
----
-
-## 10) Example Question Configs
-
-### Output match (CSV)
-
-```json
-{
-  "id": "q1",
-  "label": "Clean Lead File",
-  "max_mark": 30,
-  "marking_mode": "output_match",
-  "compare_mode": "csv",
-  "match_rules": {
-    "numeric_tolerance_pct": 1.0,
-    "ignore_row_order": true
-  },
-  "files": [{ "benchmark": "clean_leads.csv" }]
-}
-```
-
-### Semantic code (SQL)
-
-```json
-{
-  "id": "q3",
-  "label": "Pipeline SQL",
-  "max_mark": 25,
-  "marking_mode": "semantic_code",
-  "compare_mode": "code",
-  "code_marking": {
-    "weights": { "correctness": 0.7, "practice": 0.3 },
-    "correctness": {
-      "method": "behavior_rules",
-      "rules_from_code_checks": true
-    },
-    "practice": {
-      "method": "hybrid",
-      "rules_weight": 0.5,
-      "ai_weight": 0.5,
-      "checks": ["comments", "no_select_star", "uses_aliases", "reasonable_length"]
-    }
-  },
-  "files": [{ "benchmark": "pipeline_metrics.sql" }]
-}
-```
-
-### Mixed multi-file
-
-```json
-{
-  "id": "q4",
-  "label": "Lead XML Transform",
-  "max_mark": 25,
-  "marking_mode": "mixed",
-  "compare_mode": "mixed",
-  "files": [
-    { "benchmark": "lead_transform.xsl" },
-    { "benchmark": "leads_output.xml" }
-  ]
-}
-```
-
----
-
-## 11) Current Gaps / Future Work
-
-1. `text_rubric` evaluator is not implemented yet.
-2. `output_execution` is implemented for SQL (`sqlite`) and XSLT (`xslt`) execution profiles; Python runtime execution is still pending.
-3. `require_column_names` is parsed in manifest but not enforced in CSV logic.
-
-These are good candidates for the next grading-engine phase.
+1. `text_rubric` not implemented.
+2. `output_execution` currently supports SQL/XSLT; Python execution is not implemented.
+3. `require_column_names` is parsed but not yet enforced in CSV scoring.

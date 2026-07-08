@@ -1,70 +1,26 @@
 # Assignment Grading Interface
 
-Standalone grading platform for marking student submissions against benchmark files.
+Manifest-driven grading platform for marking student submissions against benchmark files.
 
-**Grading engine:** `1.1-semantic` (visible in the UI header after starting the app)
+For operator workflow and UI usage, see `GRADING_INTERFACE_GUIDE.md`.
+For scoring internals and formulas, see `MARKING_MODES_DETAILED.md`.
 
-For a complete, step-by-step operating guide, see:
-- `GRADING_INTERFACE_GUIDE.md`
+## What is implemented
 
-For a deep technical breakdown of every marking mode and scoring formula, see:
-- `MARKING_MODES_DETAILED.md`
+- Explicit per-question marking modes (`output_match`, `semantic_code`, `semantic_text`, `legacy_text`, `mixed`)
+- Semantic code grading with split score: correctness + practice
+- Execution-based correctness for SQL (`sqlite`) and XSLT (`xslt`)
+- Gemini-powered semantic text grading (`semantic_text`) with safe fallback
+- Gemini-powered code practice (`ai` / `hybrid`) with safe fallback to rules
+- Per-file mark splitting for multi-file questions
+- UI breakdowns: marking mode, correctness mode, practice mode, correctness %, practice %
 
-## Contents
-
-- [Prerequisites](#prerequisites)
-- [Project structure](#project-structure)
-- [Setup](#setup)
-- [Run the app](#run-the-app)
-- [Manifest-driven configuration](#manifest-driven-configuration)
-- [Marking modes (semantic grading)](#marking-modes-semantic-grading)
-- [Workflow](#workflow)
-- [How scoring works](#how-scoring-works)
-- [Reports](#reports)
-- [Test data](#test-data)
-- [Safety and validation](#safety-and-validation)
-- [Troubleshooting](#troubleshooting)
-
-## Prerequisites
+## Requirements
 
 - Python 3.10+
 - pip
 
-## Project structure
-
-```text
-Assignment Grading Interface/
-├── grading_app/
-│   ├── app.py                     Flask web app and routes
-│   ├── templates/index.html       UI template (Tailwind)
-│   ├── active_assignment.json     Active manifest pointer
-│   ├── manifest.py                Manifest loader/validator + marking modes
-│   ├── config.py                  Dynamic config accessors
-│   ├── grader.py                  Routing, scoring, and report writing
-│   ├── semantic_code.py           Semantic code grading (correctness + practice)
-│   ├── code_checks.py             Generic AST/regex behaviour rules
-│   ├── ast_checks.py              Safe AST rule evaluation
-│   └── upload_security.py         Upload and zip safety checks
-├── assignments/
-│   ├── technical_assignment_2024/
-│   │   └── assignment_manifest.json
-│   ├── sales_ops_demo/
-│   │   └── assignment_manifest.json
-│   └── ...
-├── test_uploads/                  Sample benchmarks and student submissions
-├── GRADING_INTERFACE_GUIDE.md
-├── requirements.txt
-└── README.md
-```
-
-Runtime directories (benchmarks, submissions, reports) are created per assignment manifest, for example:
-- `benchmark_files_sales_demo/`
-- `student_submissions_sales_demo/`
-- `outputs/grading_reports_sales_demo/`
-
-## Setup
-
-### Windows (PowerShell)
+Install dependencies:
 
 ```powershell
 python -m venv .venv
@@ -72,13 +28,12 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### macOS/Linux
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+`requirements.txt` includes:
+- `flask`
+- `pandas`
+- `google-genai`
+- `python-dotenv`
+- `pydantic`
 
 ## Run the app
 
@@ -86,115 +41,93 @@ pip install -r requirements.txt
 python grading_app/app.py
 ```
 
-Open:
-- `http://127.0.0.1:5000`
+Open `http://127.0.0.1:5000`.
 
-Confirm you are on the semantic engine by checking the header badge:
-- **Engine 1.1-semantic**
+## Gemini / AI setup
 
-## Manifest-driven configuration
+AI features (`semantic_text`, practice `ai`, practice `hybrid`) require a valid Google AI Studio API key.
 
-Grading behaviour is defined in:
+1. Generate key at [Google AI Studio](https://aistudio.google.com/apikey)
+2. Create local `.env` in repo root:
+
+```env
+GEMINI_API_KEY=AIza...your_key
+GEMINI_MODEL=gemini-2.5-flash-lite
+```
+
+Notes:
+- `GEMINI_MODEL` is optional. Default is `gemini-2.5-flash-lite`.
+- `.env` must stay local only; never commit secrets.
+- If quota is exceeded (`429 RESOURCE_EXHAUSTED`), grading safely falls back:
+  - `semantic_text` -> `fallback-text`
+  - practice `ai`/`hybrid` -> `rules-fallback`
+
+## Manifest basics
+
+Assignment behavior is defined by:
 - `assignments/<assignment_name>/assignment_manifest.json`
 
-The active manifest is read from:
+Active manifest pointer:
 - `grading_app/active_assignment.json`
 
 Example:
+
 ```json
 {
-  "manifest_path": "assignments/sales_ops_demo/assignment_manifest.json"
+  "manifest_path": "assignments/retail_ops_ai_demo/assignment_manifest.json"
 }
 ```
 
-Each manifest controls:
-- assignment metadata (`assignment_id`, `title`, `version`)
-- runtime directories (`benchmark_dir`, `submissions_dir`, `reports_dir`)
-- upload extension allowlist (`allowed_extensions`)
-- questions (`id`, `label`, `max_mark`, `marking_mode`, `compare_mode`, files)
-- per-question `match_rules` and `code_marking` settings
-- submission filename aliases (`submission_aliases`)
-- shared behaviour rules (`code_checks`) using AST or regex engines
+## Marking modes summary
 
-## Marking modes (semantic grading)
-
-Each question uses a **`marking_mode`** that controls how submissions are scored. The UI shows a badge per question (Configured Questions) and per result row (Detailed Results).
-
-| Marking mode | When to use | How it scores |
+| Mode | Typical use | Core behavior |
 |---|---|---|
-| `output_match` | CSV tables, XML outputs, images | Compares values/structure against the benchmark (not wording) |
-| `semantic_code` | SQL, XSL, Python | Behaviour rules (correctness) + coding practice heuristics |
-| `legacy_text` | Written answers (interim) | Normalised text similarity |
-| `text_rubric` | Written answers (planned) | Rubric point coverage (not yet implemented) |
-| `mixed` | Multi-file questions | Per-file mode (e.g. XSL = code, XML = output match) |
+| `output_match` | CSV/XML/image outputs | Value/structure compare against benchmark |
+| `semantic_code` | SQL/XSL/Python code files | Correctness + practice weighted score |
+| `semantic_text` | Written answers with key points | Gemini semantic coverage over benchmark points |
+| `legacy_text` | Legacy prose grading | Normalized text similarity |
+| `mixed` | Multi-file mixed artifact questions | Per-file mode dispatch by suffix |
 
-If `marking_mode` is omitted, it is inferred from `compare_mode`:
-- `csv` / `xml` / `image` → `output_match`
-- `code` → `semantic_code`
-- `text` → `legacy_text`
-- `mixed` → `mixed`
+`text_rubric` exists in schema but is not implemented for production grading yet.
 
-### Output match (`output_match`)
+## `semantic_code` quick reference
 
-Use when the answer is data, not prose.
+Formula:
 
-- **CSV:** column overlap, row counts, numeric tolerance (configurable via `match_rules`)
-- **XML:** structure and values compared
-- **Image:** binary match
-
-Example manifest snippet:
-```json
-{
-  "id": "q1",
-  "marking_mode": "output_match",
-  "compare_mode": "csv",
-  "max_mark": 30,
-  "match_rules": {
-    "numeric_tolerance_pct": 1.0,
-    "ignore_row_order": true
-  },
-  "files": [{ "benchmark": "clean_leads.csv" }]
-}
+```text
+combined = correctness * correctness_weight + practice * practice_weight
 ```
 
-### Semantic code (`semantic_code`)
+Defaults:
+- correctness weight `0.7`
+- practice weight `0.3`
 
-Use when students may solve the problem with different code than the benchmark.
+Correctness methods:
+- `behavior_rules`
+- `output_execution` (currently SQL/XSLT)
 
-Total mark is split into two weighted parts (default **70% correctness / 30% practice**):
+Practice methods:
+- `rules`
+- `ai`
+- `hybrid`
 
-```
-mark = (correctness × 0.7 + practice × 0.3) × max_mark
-```
+Example:
 
-**Correctness** — does the submission satisfy required behaviours?
-- Rules from `code_marking.correctness.rules`, or
-- Inherited from manifest `code_checks` for that file type (e.g. `.sql` regex rules)
-
-**Practice** — coding quality, configurable via `code_marking.practice.method`:
-- `rules` (default) — static checks only
-- `ai` — Gemini rates clarity/structure/comments (falls back to rules if AI fails)
-- `hybrid` — blends rules + AI using `rules_weight` / `ai_weight` (default 50/50)
-
-Static checks (used by `rules` and the rules half of `hybrid`):
-- `comments` — has explanatory comments
-- `no_select_star` — SQL does not use `SELECT *`
-- `uses_aliases` — SQL uses `AS` column aliases
-- `reasonable_length` — file is not excessively long
-- `no_hardcoded_values` — limited hardcoded string filters in SQL
-
-Example manifest snippet:
 ```json
 {
   "id": "q3",
   "marking_mode": "semantic_code",
   "compare_mode": "code",
-  "max_mark": 25,
   "code_marking": {
     "weights": { "correctness": 0.7, "practice": 0.3 },
     "correctness": {
-      "method": "behavior_rules",
-      "rules_from_code_checks": true
+      "method": "output_execution",
+      "execution": {
+        "engine": "sqlite",
+        "fixtures": [
+          { "table": "orders_fact", "path": "test_uploads/retail_ops_ai_demo/fixtures/orders_fact.csv" }
+        ]
+      }
     },
     "practice": {
       "method": "hybrid",
@@ -203,107 +136,55 @@ Example manifest snippet:
       "checks": ["comments", "no_select_star", "uses_aliases", "reasonable_length"]
     }
   },
-  "files": [{ "benchmark": "pipeline_metrics.sql" }]
+  "files": [{ "benchmark": "regional_kpi.sql" }]
 }
 ```
 
-### Multi-file questions
+## `semantic_text` quick reference
 
-When a question has multiple benchmark files, `max_mark` is **split evenly** across files. For example, a 25-mark question with an XSL file and an XML file awards up to 12.5 marks per file (100 marks total across the assignment).
+Use this for text answers where meaning matters more than exact wording.
 
-## Workflow
+Configure:
+- `marking_mode: "semantic_text"`
+- `benchmark_points` (recommended): key bullets students must cover
 
-1. **Configuration**
-   - Select an existing manifest, or upload/activate a new one.
-   - Check **Configured Questions** for marking mode badges.
-   - Optionally reset test data (benchmarks, submissions, reports).
-2. **Benchmarks**
-   - Upload benchmark files per question, or load from manifest `seed_from` mappings.
-3. **Student submission**
-   - Upload student files (or zip) under a student name.
-4. **Run grading**
-   - Set mark scale and execute grading.
-5. **Review/export**
-   - Inspect **Student Summary** (totals + avg correctness/practice).
-   - Inspect **Detailed Results** (per-file marking mode, correctness, practice, notes).
-   - Download CSV reports.
+Example:
 
-## How scoring works
-
-For each expected benchmark file:
-
-1. Find the matching student file using aliases and suffix rules.
-2. Determine `marking_mode` for that file.
-3. Score using the appropriate grader:
-   - **output_match** → value/structure comparison
-   - **semantic_code** → behaviour rules + practice heuristics
-   - **legacy_text** → text similarity
-4. Assign `mark = score × per_file_max_mark`.
-
-**Student Summary** shows:
-- `total_mark` / `total_max` / `percentage`
-- `avg_correctness` — average correctness across graded files
-- `avg_practice` — average practice score across code files
-- `missing_files` — benchmark filenames not submitted
-
-**Detailed Results** shows per file:
-- Marking mode badge (`output`, `code`, etc.)
-- Correctness % and Practice % (where applicable)
-- Combined score % and mark awarded
-- Notes (e.g. which behaviour rules passed or failed)
-
-Missing files receive `status = missing` and score `0`.
+```json
+{
+  "id": "q2",
+  "marking_mode": "semantic_text",
+  "compare_mode": "text",
+  "benchmark_points": "1) Revenue trend\n2) Main root cause\n3) Recommended action",
+  "files": [{ "benchmark": "executive_brief.md" }]
+}
+```
 
 ## Reports
 
-Written to the active manifest `reports_dir`:
+Written to manifest `reports_dir`:
 
-| File | Contents |
-|---|---|
-| `summary_report.csv` | Per-student, per-file grading rows (includes `marking_mode`, `correctness_score`, `practice_score`) |
-| `student_totals.csv` | Aggregate totals per student |
-| `code_checks.csv` | Separate structure-check results (regex/AST rules) |
-| `summary_report.json` | Full payload used to rehydrate the UI |
+- `summary_report.csv` (per-student per-file rows)
+- `student_totals.csv` (student aggregates)
+- `code_checks.csv` (standalone structure checks)
+- `summary_report.json` (UI payload)
 
-## Test data
+## Security notes
 
-Sample benchmarks and student submissions for the sales ops demo assignment live under:
-- `test_uploads/sales_ops_demo/benchmarks/`
-- `test_uploads/sales_ops_demo/student_perfect_100/` — high scores (~96/100)
-- `test_uploads/sales_ops_demo/student_goodish/` — mixed scores (~62/100)
-- `test_uploads/sales_ops_demo/student_bad_1/` — weak SQL and partial files (~51/100)
-
-To load benchmarks: use **Load Benchmarks From Solution** in the UI, or copy student folders into the active manifest `submissions_dir`.
-
-## Safety and validation
-
-- Python checks are static AST inspections (no import/exec of student code)
-- SQL can be executed in a controlled in-memory SQLite fixture mode when `correctness.method` is set to `output_execution`
-- XSLT can be executed against a fixture XML input when `correctness.method` uses `output_execution` with engine `xslt`
-- Python execution-based correctness is not enabled yet (currently behavior-rule based)
-- Uploads are restricted to manifest `allowed_extensions`
-- Zip files are validated for unsafe paths and disallowed extensions
-- Missing files degrade gracefully (no backend crash)
+- Keep `.env` out of git (`.gitignore` includes `.env`)
+- If a key is ever exposed, revoke and rotate immediately
+- Uploads and zip extraction are validated for unsafe content/paths
+- Python student code is not executed for AST correctness checks
 
 ## Troubleshooting
 
-- **UI does not show Engine 1.1-semantic**
-  - Stop the Flask server and restart from this repo root: `python grading_app/app.py`
-- **No grading results / empty tables**
-  - Ensure benchmark files are loaded for the active manifest.
-- **Scores look like plain text comparison**
-  - Confirm the manifest question has `marking_mode: "semantic_code"` or `output_match` (manifest version `1.1+`).
-  - Re-run grading after changing the manifest.
-- **Max marks show 125 instead of 100**
-  - Re-run grading with engine `1.1-semantic`; multi-file marks are now split per file.
-- **Student uploads not visible**
-  - Check active manifest `submissions_dir` in the Manifest Details panel.
-- **Upload rejected**
-  - File extension not in `allowed_extensions`.
-- **Many `missing` rows**
-  - Filenames do not match expected benchmark names/aliases.
-
----
-
-For deep operational guidance (best practices, full troubleshooting matrix, and detailed explanations), use:
-- `GRADING_INTERFACE_GUIDE.md`
+- **Seeing `fallback-text` or `rules-fallback`**
+  - Check `.env` key validity and model quota
+  - Restart Flask after changing `.env`
+- **`401 UNAUTHENTICATED` from Gemini**
+  - Use a valid AI Studio key in `GEMINI_API_KEY`
+- **`429 RESOURCE_EXHAUSTED`**
+  - Wait for quota reset or use billing
+  - Keep `GEMINI_MODEL=gemini-2.5-flash-lite` for better free-tier headroom
+- **Results look legacy**
+  - Confirm manifest `marking_mode` per question and rerun grading
