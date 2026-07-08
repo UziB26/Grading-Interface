@@ -66,8 +66,12 @@
       "code_marking": {
         "weights": { "correctness": 0.7, "practice": 0.3 },
         "correctness": {
-          "method": "behavior_rules",
-          "rules_from_code_checks": true
+          "method": "output_execution",
+          "rules_from_code_checks": false,
+          "execution": {
+            "engine": "xslt",
+            "input_path": "test_uploads/sales_ops_demo/fixtures/leads_input.xml"
+          }
         },
         "practice": {
           "checks": ["comments", "reasonable_length"]

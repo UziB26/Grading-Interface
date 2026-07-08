@@ -271,7 +271,8 @@ To load benchmarks: use **Load Benchmarks From Solution** in the UI, or copy stu
 
 - Python checks are static AST inspections (no import/exec of student code)
 - SQL can be executed in a controlled in-memory SQLite fixture mode when `correctness.method` is set to `output_execution`
-- XSL/Python execution-based correctness is not enabled yet (currently behavior-rule based)
+- XSLT can be executed against a fixture XML input when `correctness.method` uses `output_execution` with engine `xslt`
+- Python execution-based correctness is not enabled yet (currently behavior-rule based)
 - Uploads are restricted to manifest `allowed_extensions`
 - Zip files are validated for unsafe paths and disallowed extensions
 - Missing files degrade gracefully (no backend crash)

@@ -78,6 +78,7 @@ class ExecutionFixture:
 class CodeExecutionSpec:
     engine: str
     fixtures: tuple[ExecutionFixture, ...] = ()
+    input_path: str | None = None
     ignore_row_order: bool = True
     numeric_tolerance_pct: float = 0.0
 
@@ -229,7 +230,7 @@ def _parse_code_execution(raw: dict[str, Any]) -> CodeExecutionSpec:
     if not isinstance(raw, dict):
         raise ValueError("correctness.execution must be an object")
     engine = str(raw.get("engine", "")).strip().lower()
-    if engine not in {"sqlite"}:
+    if engine not in {"sqlite", "xslt"}:
         raise ValueError(f"Unsupported execution engine '{engine}'")
     fixtures_raw = raw.get("fixtures", [])
     if not isinstance(fixtures_raw, list):
@@ -246,6 +247,7 @@ def _parse_code_execution(raw: dict[str, Any]) -> CodeExecutionSpec:
     return CodeExecutionSpec(
         engine=engine,
         fixtures=tuple(fixtures),
+        input_path=str(raw.get("input_path")).strip() if raw.get("input_path") else None,
         ignore_row_order=bool(raw.get("ignore_row_order", True)),
         numeric_tolerance_pct=float(raw.get("numeric_tolerance_pct", 0.0)),
     )

@@ -147,9 +147,10 @@ If `.py` has syntax error:
 - details include syntax error
 
 If `correctness.method = "output_execution"`:
-- SQL is executed against SQLite fixtures and compared to benchmark-query output
-- currently supported engine: `sqlite`
-- output is compared by columns + rows + values (with optional numeric tolerance)
+- SQL can be executed against SQLite fixtures and compared to benchmark-query output
+- XSLT can be executed against a fixture XML input and compared to benchmark-transform output
+- currently supported engines: `sqlite`, `xslt`
+- output is compared by columns + rows + values (SQL) or normalized XML similarity (XSLT)
 - if execution profile is missing/unsupported, correctness is `0.0` with explanatory notes
 
 ### 4.2 Practice component
@@ -317,7 +318,7 @@ Avoid `text_rubric` until implemented.
 ## 11) Current Gaps / Future Work
 
 1. `text_rubric` evaluator is not implemented yet.
-2. `output_execution` is currently implemented for SQL + SQLite fixtures only (not yet for XSL/Python runtime execution).
+2. `output_execution` is implemented for SQL (`sqlite`) and XSLT (`xslt`) execution profiles; Python runtime execution is still pending.
 3. `require_column_names` is parsed in manifest but not enforced in CSV logic.
 
 These are good candidates for the next grading-engine phase.

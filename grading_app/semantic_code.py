@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import difflib
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
+from lxml import etree
 
 from grading_app.ast_checks import build_python_ast_profile, evaluate_ast_rule
 from grading_app.code_checks import run_regex_rules
@@ -271,6 +273,64 @@ def _score_sql_output_execution(
         conn.close()
 
 
+def _normalize_xml_text(xml_text: str) -> str:
+    try:
+        root = etree.fromstring(xml_text.encode("utf-8"))
+    except Exception:  # noqa: BLE001
+        return " ".join(xml_text.split())
+
+    def local_name(tag: str) -> str:
+        return tag.split("}", 1)[-1] if "}" in tag else tag
+
+    def walk(element: etree._Element, depth: int = 0) -> list[str]:
+        attrs = " ".join(f'{local_name(k)}="{element.attrib[k]}"' for k in sorted(element.attrib))
+        text = (element.text or "").strip()
+        rows = [f"{'  ' * depth}<{local_name(element.tag)} {attrs}>{text}"]
+        for child in element:
+            rows.extend(walk(child, depth + 1))
+        return rows
+
+    return "\n".join(walk(root))
+
+
+def _score_xslt_output_execution(
+    submitted: Path,
+    benchmark: Path | None,
+    execution: CodeExecutionSpec,
+) -> tuple[float, int, int, str]:
+    if benchmark is None:
+        return 0.0, 0, 1, "Output execution requires a benchmark transform file"
+    if not execution.input_path:
+        return 0.0, 0, 1, "XSLT output execution requires execution.input_path"
+
+    input_path = _resolve_fixture_path(execution.input_path)
+    if not input_path.exists():
+        return 0.0, 0, 1, f"XSLT input fixture missing: {execution.input_path}"
+
+    parser = etree.XMLParser(resolve_entities=False, no_network=True, remove_blank_text=True)
+    access_control = etree.XSLTAccessControl(
+        read_file=False,
+        write_file=False,
+        create_dir=False,
+        read_network=False,
+        write_network=False,
+    )
+    try:
+        input_doc_expected = etree.parse(str(input_path), parser)
+        input_doc_actual = etree.parse(str(input_path), parser)
+        benchmark_xslt = etree.XSLT(etree.parse(str(benchmark), parser), access_control=access_control)
+        submitted_xslt = etree.XSLT(etree.parse(str(submitted), parser), access_control=access_control)
+        expected_xml = str(benchmark_xslt(input_doc_expected))
+        actual_xml = str(submitted_xslt(input_doc_actual))
+        expected_norm = _normalize_xml_text(expected_xml)
+        actual_norm = _normalize_xml_text(actual_xml)
+        similarity = difflib.SequenceMatcher(None, actual_norm, expected_norm).ratio()
+        passed = 1 if similarity >= 0.9999 else 0
+        return float(similarity), passed, 1, f"XSLT output compared ({similarity * 100:.1f}% similarity)"
+    except Exception as exc:  # noqa: BLE001
+        return 0.0, 0, 1, f"XSLT output execution failed: {exc}"
+
+
 def grade_semantic_code(
     submitted: Path,
     question: QuestionSpec,
@@ -287,6 +347,10 @@ def grade_semantic_code(
         execution = spec.correctness.execution
         if submitted.suffix.lower() == ".sql" and execution and execution.engine == "sqlite":
             correctness, correctness_passed, correctness_total, correctness_details = _score_sql_output_execution(
+                submitted, benchmark, execution
+            )
+        elif submitted.suffix.lower() in {".xsl", ".xslt"} and execution and execution.engine == "xslt":
+            correctness, correctness_passed, correctness_total, correctness_details = _score_xslt_output_execution(
                 submitted, benchmark, execution
             )
         else:

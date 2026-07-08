@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<leads>
+  <lead id="L-001">
+    <region>EMEA</region>
+    <status>won</status>
+    <score>95</score>
+  </lead>
+  <lead id="L-002">
+    <region>AMER</region>
+    <status>open</status>
+    <score>74</score>
+  </lead>
+  <lead id="L-003">
+    <region>APAC</region>
+    <status>won</status>
+    <score>88</score>
+  </lead>
+</leads>
