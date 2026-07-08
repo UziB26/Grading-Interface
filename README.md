@@ -7,6 +7,9 @@ Standalone grading platform for marking student submissions against benchmark fi
 For a complete, step-by-step operating guide, see:
 - `GRADING_INTERFACE_GUIDE.md`
 
+For a deep technical breakdown of every marking mode and scoring formula, see:
+- `MARKING_MODES_DETAILED.md`
+
 ## Contents
 
 - [Prerequisites](#prerequisites)
