@@ -1,0 +1,54 @@
+{
+  "assignment_id": "python_exec_demo",
+  "title": "Python Output Execution Demo",
+  "version": "1.0",
+  "benchmark_dir": "benchmark_files_python_exec_demo",
+  "submissions_dir": "student_submissions_python_exec_demo",
+  "reports_dir": "outputs/grading_reports_python_exec_demo",
+  "allowed_extensions": [".py", ".txt", ".zip"],
+  "questions": [
+    {
+      "id": "q1",
+      "label": "Sum Numbers from stdin",
+      "max_mark": 20,
+      "marking_mode": "semantic_code",
+      "compare_mode": "code",
+      "code_marking": {
+        "weights": { "correctness": 0.8, "practice": 0.2 },
+        "correctness": {
+          "method": "output_execution",
+          "rules_from_code_checks": false,
+          "execution": {
+            "engine": "python",
+            "input_path": "test_uploads/python_exec_demo/fixtures/numbers.txt"
+          }
+        },
+        "practice": {
+          "method": "rules",
+          "checks": ["comments", "reasonable_length"]
+        }
+      },
+      "files": [
+        {
+          "benchmark": "sum_numbers.py",
+          "seed_from": "test_uploads/python_exec_demo/benchmarks/q1/sum_numbers.py"
+        }
+      ]
+    }
+  ],
+  "submission_aliases": {
+    "sum_numbers.py": ["sum_numbers.py", "q1_sum_numbers.py", "solution.py"]
+  },
+  "code_checks": {
+    ".py": {
+      "engine": "ast",
+      "rules": [
+        {
+          "label": "reads stdin",
+          "type": "token_match",
+          "tokens": ["stdin"]
+        }
+      ]
+    }
+  }
+}

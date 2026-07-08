@@ -88,7 +88,7 @@ Example:
 | `legacy_text` | Legacy prose grading | Normalized text similarity |
 | `mixed` | Multi-file mixed artifact questions | Per-file mode dispatch by suffix |
 
-`text_rubric` exists in schema but is not implemented for production grading yet.
+`text_rubric` is a reserved placeholder mode. Use `semantic_text` for text grading.
 
 ## `semantic_code` quick reference
 
@@ -104,7 +104,7 @@ Defaults:
 
 Correctness methods:
 - `behavior_rules`
-- `output_execution` (currently SQL/XSLT)
+- `output_execution` (SQL/XSLT/Python)
 
 Practice methods:
 - `rules`

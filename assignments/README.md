@@ -56,13 +56,13 @@ Top-level fields to define:
 - `semantic_text`: Gemini semantic point coverage for prose
 - `legacy_text`: deterministic text similarity
 - `mixed`: per-file dispatch
-- `text_rubric`: schema-only, not production-ready
+- `text_rubric`: reserved placeholder (use `semantic_text`)
 
 ## `code_marking` structure
 
 - `weights`: correctness/practice split
 - `correctness.method`: `behavior_rules` or `output_execution`
-- `correctness.execution.engine`: `sqlite` or `xslt`
+- `correctness.execution.engine`: `sqlite`, `xslt`, or `python`
 - `practice.method`: `rules`, `ai`, or `hybrid`
 - `practice.checks`: optional explicit check list
 - `practice.rules_weight` / `practice.ai_weight` for hybrid

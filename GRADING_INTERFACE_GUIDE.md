@@ -84,7 +84,7 @@ Normalized text similarity fallback/legacy path.
 ### `mixed`
 Per-file dispatch based on suffix.
 
-## 6) Execution-based correctness (SQL/XSLT)
+## 6) Execution-based correctness (SQL/XSLT/Python)
 
 Use `code_marking.correctness.method = "output_execution"`.
 
@@ -97,6 +97,13 @@ Use `code_marking.correctness.method = "output_execution"`.
 - Use fixture XML input
 - Run benchmark and student transforms
 - Compare normalized output
+
+### Python (`engine: python`)
+- Run benchmark and student scripts with the same stdin fixture (optional `input_path`)
+- Compare stdout output similarity
+
+Security note:
+- `engine: python` executes scripts (benchmark + student). There is a timeout, but the code is not fully sandboxed. Use only for trusted code or run inside an isolated environment/container.
 
 ## 7) AI fallback behavior
 
@@ -147,6 +154,7 @@ Important columns in detailed rows:
 - Never bypass secret scanning for live secrets
 - Revoke and rotate any exposed key immediately
 - Keep `.env.example` with placeholders only
+- If you enable `code_marking.correctness.method = "output_execution"` with `execution.engine = "python"`, treat submissions as trusted (scripts are executed; only a timeout is enforced).
 
 ## 11) Creating a new assignment quickly
 

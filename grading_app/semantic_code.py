@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 import sqlite3
 import difflib
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -392,6 +394,59 @@ def _score_xslt_output_execution(
         return 0.0, 0, 1, f"XSLT output execution failed: {exc}"
 
 
+def _run_python_file(script_path: Path, stdin_text: str) -> tuple[bool, str]:
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script_path)],
+            input=stdin_text,
+            text=True,
+            capture_output=True,
+            timeout=8,
+            check=False,
+            cwd=str(script_path.parent),
+        )
+    except subprocess.TimeoutExpired:
+        return False, "Python execution timed out after 8s"
+    except Exception as exc:  # noqa: BLE001
+        return False, f"Python execution failed: {exc}"
+
+    if proc.returncode != 0:
+        err = (proc.stderr or "").strip()
+        return False, f"Python script exited with code {proc.returncode}: {err or 'no stderr output'}"
+    return True, (proc.stdout or "").strip()
+
+
+def _score_python_output_execution(
+    submitted: Path,
+    benchmark: Path | None,
+    execution: CodeExecutionSpec,
+) -> tuple[float, int, int, str]:
+    if benchmark is None:
+        return 0.0, 0, 1, "Output execution requires a benchmark Python file"
+    if benchmark.suffix.lower() != ".py":
+        return 0.0, 0, 1, f"Benchmark for python execution must be .py, got {benchmark.suffix or '(none)'}"
+
+    stdin_text = ""
+    if execution.input_path:
+        input_path = _resolve_fixture_path(execution.input_path)
+        if not input_path.exists():
+            return 0.0, 0, 1, f"Python input fixture missing: {execution.input_path}"
+        stdin_text = input_path.read_text(encoding="utf-8", errors="ignore")
+
+    ok_expected, expected = _run_python_file(benchmark, stdin_text)
+    if not ok_expected:
+        return 0.0, 0, 1, f"Benchmark python execution failed: {expected}"
+
+    ok_actual, actual = _run_python_file(submitted, stdin_text)
+    if not ok_actual:
+        return 0.0, 0, 1, f"Student python execution failed: {actual}"
+
+    ratio = difflib.SequenceMatcher(None, actual, expected).ratio()
+    passed = 1 if ratio >= 0.9999 else 0
+    detail = f"Python output compared ({ratio * 100:.1f}% similarity)"
+    return float(ratio), passed, 1, detail
+
+
 def grade_semantic_code(
     submitted: Path,
     question: QuestionSpec,
@@ -412,6 +467,10 @@ def grade_semantic_code(
             )
         elif submitted.suffix.lower() in {".xsl", ".xslt"} and execution and execution.engine == "xslt":
             correctness, correctness_passed, correctness_total, correctness_details = _score_xslt_output_execution(
+                submitted, benchmark, execution
+            )
+        elif submitted.suffix.lower() == ".py" and execution and execution.engine == "python":
+            correctness, correctness_passed, correctness_total, correctness_details = _score_python_output_execution(
                 submitted, benchmark, execution
             )
         else:

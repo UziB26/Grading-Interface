@@ -19,7 +19,7 @@ Supported modes:
 - `semantic_text`
 - `legacy_text`
 - `mixed`
-- `text_rubric` (schema only, not production-ready)
+- `text_rubric` (reserved placeholder; use `semantic_text`)
 
 If omitted, mode is inferred from `compare_mode`:
 - `csv`, `xml`, `image` -> `output_match`
@@ -109,6 +109,7 @@ Evaluation:
 Currently supported engines:
 - `sqlite` (SQL)
 - `xslt` (XSL/XSLT)
+- `python` (Python scripts)
 
 SQL execution behavior:
 - Load fixtures into SQLite tables
@@ -118,6 +119,11 @@ SQL execution behavior:
 XSLT execution behavior:
 - Apply benchmark and student transforms to fixture XML
 - Compare normalized output similarity
+
+Python execution behavior (security note):
+- Runs the benchmark `.py` and the student `.py` with the same stdin input (from `execution.input_path`, if provided)
+- Compares stdout similarity to the benchmark output
+- Uses a short timeout, but **does not fully sandbox** the scripts (treat submissions as trusted, or run in an isolated environment/container)
 
 If execution config is missing/invalid, correctness becomes `0.0` with explanation in notes.
 
@@ -187,8 +193,8 @@ Per-file marks sum into the question total.
 
 ## 8) `text_rubric`
 
-Available in schema but not implemented for production scoring yet.
-Current behavior returns zero score with explanatory notes.
+Reserved placeholder mode in schema. Use `semantic_text` for text grading.
+Current `text_rubric` behavior returns zero score with explanatory notes.
 
 ## 9) Gemini integration behavior
 
@@ -215,6 +221,5 @@ Fallback safety guarantees:
 
 ## 11) Known gaps
 
-1. `text_rubric` not implemented.
-2. `output_execution` currently supports SQL/XSLT; Python execution is not implemented.
-3. `require_column_names` is parsed but not yet enforced in CSV scoring.
+1. `text_rubric` remains a reserved placeholder mode (not an active grading pipeline).
+2. `require_column_names` is parsed but not yet enforced in CSV scoring.

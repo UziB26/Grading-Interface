@@ -98,6 +98,7 @@ Saved to active manifest `reports_dir`:
 - `.env` is ignored by git
 - if a key is exposed, revoke and rotate immediately
 - keep only placeholders in `.env.example`
+- If you enable `output_execution` with `execution.engine = "python"`, scripts are executed (timeout only). Use this only for trusted submissions or inside an isolated environment.
 
 ## 12) Next docs
 

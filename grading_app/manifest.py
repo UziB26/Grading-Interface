@@ -259,7 +259,7 @@ def _parse_code_execution(raw: dict[str, Any]) -> CodeExecutionSpec:
     if not isinstance(raw, dict):
         raise ValueError("correctness.execution must be an object")
     engine = str(raw.get("engine", "")).strip().lower()
-    if engine not in {"sqlite", "xslt"}:
+    if engine not in {"sqlite", "xslt", "python"}:
         raise ValueError(f"Unsupported execution engine '{engine}'")
     fixtures_raw = raw.get("fixtures", [])
     if not isinstance(fixtures_raw, list):
