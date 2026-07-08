@@ -1,0 +1,9 @@
+lead_id,region,status,snapshot_date
+L-001,EMEA,won,2026-02-01
+L-002,EMEA,open,2026-02-01
+L-003,AMER,won,2026-03-10
+L-004,AMER,lost,2026-03-10
+L-005,APAC,won,2026-04-12
+L-006,APAC,open,2026-04-12
+L-007,EMEA,won,2026-05-20
+L-008,AMER,won,2026-05-20

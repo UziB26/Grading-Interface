@@ -270,7 +270,8 @@ To load benchmarks: use **Load Benchmarks From Solution** in the UI, or copy stu
 ## Safety and validation
 
 - Python checks are static AST inspections (no import/exec of student code)
-- SQL/XSL are not executed for grading (behaviour rules are pattern-based)
+- SQL can be executed in a controlled in-memory SQLite fixture mode when `correctness.method` is set to `output_execution`
+- XSL/Python execution-based correctness is not enabled yet (currently behavior-rule based)
 - Uploads are restricted to manifest `allowed_extensions`
 - Zip files are validated for unsafe paths and disallowed extensions
 - Missing files degrade gracefully (no backend crash)

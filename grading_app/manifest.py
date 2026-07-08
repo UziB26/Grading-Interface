@@ -60,11 +60,26 @@ class CodeMarkingCorrectness:
     method: str
     rules: tuple[StructureRule, ...] = ()
     rules_from_code_checks: bool = True
+    execution: "CodeExecutionSpec | None" = None
 
 
 @dataclass(frozen=True)
 class CodeMarkingPractice:
     checks: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ExecutionFixture:
+    table: str
+    path: str
+
+
+@dataclass(frozen=True)
+class CodeExecutionSpec:
+    engine: str
+    fixtures: tuple[ExecutionFixture, ...] = ()
+    ignore_row_order: bool = True
+    numeric_tolerance_pct: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -193,6 +208,8 @@ def _parse_code_marking(raw: dict[str, Any] | None) -> CodeMarkingSpec | None:
     for check in checks:
         if check not in VALID_PRACTICE_CHECKS:
             raise ValueError(f"Unsupported practice check '{check}'")
+    execution_raw = correctness_raw.get("execution")
+    execution = _parse_code_execution(execution_raw) if execution_raw else None
     return CodeMarkingSpec(
         weights=CodeMarkingWeights(
             correctness=float(weights_raw.get("correctness", 0.7)),
@@ -202,8 +219,35 @@ def _parse_code_marking(raw: dict[str, Any] | None) -> CodeMarkingSpec | None:
             method=method,
             rules=rules,
             rules_from_code_checks=bool(correctness_raw.get("rules_from_code_checks", True)),
+            execution=execution,
         ),
         practice=CodeMarkingPractice(checks=checks),
+    )
+
+
+def _parse_code_execution(raw: dict[str, Any]) -> CodeExecutionSpec:
+    if not isinstance(raw, dict):
+        raise ValueError("correctness.execution must be an object")
+    engine = str(raw.get("engine", "")).strip().lower()
+    if engine not in {"sqlite"}:
+        raise ValueError(f"Unsupported execution engine '{engine}'")
+    fixtures_raw = raw.get("fixtures", [])
+    if not isinstance(fixtures_raw, list):
+        raise ValueError("correctness.execution.fixtures must be a list")
+    fixtures: list[ExecutionFixture] = []
+    for item in fixtures_raw:
+        if not isinstance(item, dict):
+            raise ValueError("Each execution fixture must be an object")
+        table = str(item.get("table", "")).strip()
+        path = str(item.get("path", "")).strip()
+        if not table or not path:
+            raise ValueError("Execution fixture requires table and path")
+        fixtures.append(ExecutionFixture(table=table, path=path))
+    return CodeExecutionSpec(
+        engine=engine,
+        fixtures=tuple(fixtures),
+        ignore_row_order=bool(raw.get("ignore_row_order", True)),
+        numeric_tolerance_pct=float(raw.get("numeric_tolerance_pct", 0.0)),
     )
 
 

@@ -37,8 +37,19 @@
       "code_marking": {
         "weights": { "correctness": 0.7, "practice": 0.3 },
         "correctness": {
-          "method": "behavior_rules",
-          "rules_from_code_checks": true
+          "method": "output_execution",
+          "rules_from_code_checks": false,
+          "execution": {
+            "engine": "sqlite",
+            "fixtures": [
+              {
+                "table": "crm_leads",
+                "path": "test_uploads/sales_ops_demo/fixtures/crm_leads.csv"
+              }
+            ],
+            "ignore_row_order": true,
+            "numeric_tolerance_pct": 0.0
+          }
         },
         "practice": {
           "checks": ["comments", "no_select_star", "uses_aliases", "reasonable_length"]
