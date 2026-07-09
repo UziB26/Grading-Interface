@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import difflib
 import json
@@ -14,7 +15,7 @@ import pandas as pd
 
 from grading_app.code_checks import analyze_file_with_manifest
 from grading_app.config import ROOT, get_manifest
-from grading_app.ai_evaluator import evaluate_with_ai
+from grading_app.ai_evaluator import async_evaluate_with_ai, evaluate_with_ai, format_ai_error
 from grading_app.manifest import QuestionSpec, marking_mode_for_file
 from grading_app.semantic_code import grade_semantic_code
 
@@ -385,7 +386,7 @@ def grade_file_item(
                 correctness_method="fallback-text",
                 practice_method=None,
                 mark=round(fallback * max_mark, 2),
-                notes=f"Correctness mode: fallback-text; AI unavailable: {exc}",
+                notes=f"Correctness mode: fallback-text; AI unavailable: {format_ai_error(exc)}",
             )
 
     if marking_mode == "text_rubric":
@@ -451,6 +452,99 @@ def grade_file_item(
             mark=0.0,
             notes=f"Comparison failed: {exc}",
         )
+
+
+def _build_semantic_text_prompt(question: QuestionSpec, benchmark: Path, submitted: Path) -> tuple[str, str]:
+    student_text = read_text(submitted)
+    benchmark_text = read_text(benchmark)
+    target_points = question.benchmark_points.strip() if question.benchmark_points else benchmark_text
+    prompt = (
+        f"[TARGET POINTS]\n{target_points}\n\n"
+        f"[BENCHMARK ANSWER]\n{benchmark_text}\n\n"
+        f"[STUDENT SUBMISSION]\n{student_text}"
+    )
+    system_instruction = (
+        "You are grading semantic coverage. Score from 0.0 to 1.0 based on whether "
+        "the student covered the key target points, regardless of exact wording."
+    )
+    return prompt, system_instruction
+
+
+async def grade_file_item_async(
+    student_dir: Path,
+    question: QuestionSpec,
+    benchmark_name: str,
+    benchmark: Path,
+    submitted: Path,
+    max_mark: float,
+    manifest,
+    project_root: Path,
+) -> GradeResult:
+    marking_mode = marking_mode_for_file(question, benchmark_name)
+    base = {
+        "student": student_dir.name,
+        "question": question.question_id,
+        "question_label": question.label,
+        "benchmark_file": str(benchmark.resolve().relative_to(project_root)),
+        "submitted_file": str(submitted.resolve().relative_to(project_root)),
+        "max_mark": max_mark,
+        "marking_mode": marking_mode,
+    }
+
+    if marking_mode == "semantic_code":
+        # Keep compatibility with current semantic_code path while allowing concurrency.
+        return await asyncio.to_thread(
+            grade_file_item,
+            student_dir,
+            question,
+            benchmark_name,
+            benchmark,
+            submitted,
+            max_mark,
+            manifest,
+            project_root,
+        )
+
+    if marking_mode == "semantic_text":
+        prompt, system_instruction = _build_semantic_text_prompt(question, benchmark, submitted)
+        try:
+            ai_result = await async_evaluate_with_ai(prompt, system_instruction)
+            return GradeResult(
+                **base,
+                status="graded",
+                similarity=ai_result.score,
+                correctness_score=ai_result.score,
+                practice_score=None,
+                correctness_method="ai-semantic",
+                practice_method=None,
+                mark=round(ai_result.score * max_mark, 2),
+                notes=f"Correctness mode: ai-semantic; {ai_result.feedback}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            fallback = text_similarity(benchmark, submitted)
+            return GradeResult(
+                **base,
+                status="graded",
+                similarity=round(fallback, 4),
+                correctness_score=round(fallback, 4),
+                practice_score=None,
+                correctness_method="fallback-text",
+                practice_method=None,
+                mark=round(fallback * max_mark, 2),
+                notes=f"Correctness mode: fallback-text; AI unavailable: {format_ai_error(exc)}",
+            )
+
+    return await asyncio.to_thread(
+        grade_file_item,
+        student_dir,
+        question,
+        benchmark_name,
+        benchmark,
+        submitted,
+        max_mark,
+        manifest,
+        project_root,
+    )
 
 
 def grade_student(student_dir: Path, mark_scale: float = 1.0) -> list[GradeResult]:
@@ -535,6 +629,114 @@ def grade_student(student_dir: Path, mark_scale: float = 1.0) -> list[GradeResul
                 )
             )
     return results
+
+
+async def grade_student_async(student_dir: Path, mark_scale: float = 1.0) -> list[GradeResult]:
+    results: list[GradeResult] = []
+    student_dir = student_dir.resolve()
+    project_root = ROOT.resolve()
+    manifest = get_manifest()
+    aliases_map = manifest.submission_aliases
+
+    for question in manifest.questions:
+        question_dir = manifest.benchmark_dir / question.question_id
+        if not question_dir.exists():
+            continue
+        max_mark = round(question.max_mark * mark_scale, 2)
+        file_count = len(question.benchmark_files)
+        per_file_max = round(max_mark / file_count, 2) if file_count else max_mark
+        per_file_marks = [per_file_max] * file_count
+        remainder = round(max_mark - sum(per_file_marks), 2)
+        if per_file_marks and remainder:
+            per_file_marks[-1] = round(per_file_marks[-1] + remainder, 2)
+        for file_index, benchmark_name in enumerate(question.benchmark_files):
+            file_max_mark = per_file_marks[file_index]
+            benchmark = question_dir / benchmark_name
+            if not benchmark.exists():
+                continue
+            submitted = find_submission_file(student_dir, benchmark_name, aliases_map)
+            if submitted is None:
+                results.append(
+                    GradeResult(
+                        student=student_dir.name,
+                        question=question.question_id,
+                        question_label=question.label,
+                        benchmark_file=str(benchmark.resolve().relative_to(project_root)),
+                        submitted_file="",
+                        status="missing",
+                        marking_mode=marking_mode_for_file(question, benchmark_name),
+                        similarity=0.0,
+                        correctness_score=0.0,
+                        practice_score=None,
+                        correctness_method=None,
+                        practice_method=None,
+                        mark=0.0,
+                        max_mark=file_max_mark,
+                        notes=f"Missing: {benchmark_name}",
+                    )
+                )
+                continue
+
+            if not submitted.exists():
+                results.append(
+                    GradeResult(
+                        student=student_dir.name,
+                        question=question.question_id,
+                        question_label=question.label,
+                        benchmark_file=str(benchmark.resolve().relative_to(project_root)),
+                        submitted_file=str(submitted.resolve().relative_to(project_root)),
+                        status="missing",
+                        marking_mode=marking_mode_for_file(question, benchmark_name),
+                        similarity=0.0,
+                        correctness_score=0.0,
+                        practice_score=None,
+                        correctness_method=None,
+                        practice_method=None,
+                        mark=0.0,
+                        max_mark=file_max_mark,
+                        notes=f"Missing: {benchmark_name}",
+                    )
+                )
+                continue
+
+            results.append(
+                await grade_file_item_async(
+                    student_dir,
+                    question,
+                    benchmark_name,
+                    benchmark,
+                    submitted,
+                    file_max_mark,
+                    manifest,
+                    project_root,
+                )
+            )
+    return results
+
+
+async def grade_all_students_async(
+    student_dirs: list[Path],
+    mark_scale: float = 1.0,
+) -> tuple[list[GradeResult], list[CodeCheckResult], list[str]]:
+    async def _grade_one(student_dir: Path) -> tuple[list[GradeResult], list[CodeCheckResult]]:
+        graded = await grade_student_async(student_dir, mark_scale=mark_scale)
+        checks = await asyncio.to_thread(check_student_code, student_dir)
+        return graded, checks
+
+    tasks = [_grade_one(student_dir) for student_dir in student_dirs]
+    pairs = await asyncio.gather(*tasks, return_exceptions=True)
+
+    results: list[GradeResult] = []
+    code_checks: list[CodeCheckResult] = []
+    errors: list[str] = []
+    for student_dir, item in zip(student_dirs, pairs):
+        if isinstance(item, Exception):
+            errors.append(f"{student_dir.name}: {item}")
+            continue
+        graded, checks = item
+        results.extend(graded)
+        code_checks.extend(checks)
+    return results, code_checks, errors
 
 
 def build_student_summaries(

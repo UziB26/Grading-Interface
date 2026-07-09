@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from grading_app.async_utils import run_async  # noqa: E402
+
 from grading_app.config import (  # noqa: E402
     get_benchmark_dir,
     get_manifest,
@@ -27,8 +29,7 @@ from grading_app.grader import (  # noqa: E402
     GradeResult,
     StudentSummary,
     build_student_summaries,
-    check_student_code,
-    grade_student,
+    grade_all_students_async,
     seed_benchmarks as copy_solution_benchmarks,
     write_reports,
 )
@@ -401,14 +402,18 @@ def upload_submission():
 def grade():
     ensure_directories()
     mark_scale = float(request.form.get("mark_scale", 1))
-    results: list[GradeResult] = []
-    code_checks = []
-    for student_dir in sorted(path for path in get_submissions_dir().iterdir() if path.is_dir()):
-        try:
-            results.extend(grade_student(student_dir, mark_scale=mark_scale))
-            code_checks.extend(check_student_code(student_dir))
-        except Exception as exc:
-            flash(f"Grading skipped errors for {student_dir.name}: {exc}")
+    student_dirs = sorted(path for path in get_submissions_dir().iterdir() if path.is_dir())
+    try:
+        results, code_checks, grading_errors = run_async(
+            grade_all_students_async(student_dirs, mark_scale=mark_scale)
+        )
+    except Exception as exc:  # noqa: BLE001
+        flash(f"Async grading failed; no reports were written: {exc}")
+        return redirect(url_for("index"))
+    for message in grading_errors[:5]:
+        flash(f"Grading skipped errors: {message}")
+    if len(grading_errors) > 5:
+        flash(f"Grading skipped errors for {len(grading_errors) - 5} more student(s).")
     summaries = build_student_summaries(results, code_checks)
     write_reports(results, summaries, code_checks)
     flash(f"Graded {len(summaries)} student(s); {len(results)} file comparison(s) recorded.")

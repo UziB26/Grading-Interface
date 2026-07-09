@@ -16,7 +16,7 @@ from lxml import etree
 from grading_app.ast_checks import build_python_ast_profile, evaluate_ast_rule
 from grading_app.code_checks import run_regex_rules
 from grading_app.manifest import AssignmentManifest, ROOT, CodeExecutionSpec, QuestionSpec, StructureRule
-from grading_app.ai_evaluator import evaluate_with_ai
+from grading_app.ai_evaluator import evaluate_with_ai, format_ai_error
 
 
 @dataclass
@@ -233,7 +233,7 @@ def _score_practice_hybrid(
             details = f"Practice AI: {ai_feedback}"
             return ai_score, 1 if ai_score >= 0.5 else 0, 1, details, "ai"
         except Exception as exc:  # noqa: BLE001
-            details = f"{rules_details}; AI practice unavailable: {exc}"
+            details = f"{rules_details}; AI practice unavailable: {format_ai_error(exc)}"
             return rules_score, passed, total, details, "rules-fallback"
 
     # hybrid
@@ -248,7 +248,7 @@ def _score_practice_hybrid(
         )
         return combined, passed, total, details, "hybrid"
     except Exception as exc:  # noqa: BLE001
-        details = f"{rules_details}; AI practice unavailable (used rules only): {exc}"
+        details = f"{rules_details}; AI practice unavailable (used rules only): {format_ai_error(exc)}"
         return rules_score, passed, total, details, "rules-fallback"
 
 
