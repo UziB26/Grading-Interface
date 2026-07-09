@@ -90,6 +90,9 @@ class CodeExecutionSpec:
     engine: str
     fixtures: tuple[ExecutionFixture, ...] = ()
     input_path: str | None = None
+    language: str | None = None
+    image: str | None = None
+    timeout_seconds: int = 8
     ignore_row_order: bool = True
     numeric_tolerance_pct: float = 0.0
 
@@ -259,7 +262,7 @@ def _parse_code_execution(raw: dict[str, Any]) -> CodeExecutionSpec:
     if not isinstance(raw, dict):
         raise ValueError("correctness.execution must be an object")
     engine = str(raw.get("engine", "")).strip().lower()
-    if engine not in {"sqlite", "xslt", "python"}:
+    if engine not in {"sqlite", "xslt", "python", "docker"}:
         raise ValueError(f"Unsupported execution engine '{engine}'")
     fixtures_raw = raw.get("fixtures", [])
     if not isinstance(fixtures_raw, list):
@@ -277,6 +280,9 @@ def _parse_code_execution(raw: dict[str, Any]) -> CodeExecutionSpec:
         engine=engine,
         fixtures=tuple(fixtures),
         input_path=str(raw.get("input_path")).strip() if raw.get("input_path") else None,
+        language=str(raw.get("language")).strip().lower() if raw.get("language") else None,
+        image=str(raw.get("image")).strip() if raw.get("image") else None,
+        timeout_seconds=max(1, int(raw.get("timeout_seconds", 8))),
         ignore_row_order=bool(raw.get("ignore_row_order", True)),
         numeric_tolerance_pct=float(raw.get("numeric_tolerance_pct", 0.0)),
     )
@@ -315,7 +321,7 @@ def marking_mode_for_file(question: QuestionSpec, filename: str) -> str:
         return "output_match"
     if suffix == ".xml":
         return "output_match"
-    if suffix in {".sql", ".xsl", ".xslt", ".py"}:
+    if suffix in {".sql", ".xsl", ".xslt", ".py", ".java", ".cpp", ".cc", ".cxx"}:
         return "semantic_code"
     return "legacy_text"
 

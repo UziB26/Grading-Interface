@@ -14,6 +14,11 @@
         Active assignment: <span class="font-semibold text-slate-900">{{ assignment_title }}</span>
         ({{ assignment_id }}) - {{ question_count }} question(s), {{ "%.2f"|format(total_max_mark) }} marks total.
         <span class="ml-2 rounded bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800">Engine {{ grading_engine_version }}</span>
+        {% if docker_available %}
+          <span class="ml-2 rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800" title="{{ docker_status_message }}">Docker sandbox: available</span>
+        {% else %}
+          <span class="ml-2 rounded bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-800" title="{{ docker_status_message }}">Docker sandbox: unavailable</span>
+        {% endif %}
       </p>
     </header>
 
@@ -86,6 +91,13 @@
               </button>
             </div>
           </div>
+        </form>
+
+        <form method="post" action="{{ url_for('health_docker') }}" class="mt-4">
+          <button type="submit" class="rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800">
+            Check Docker Sandbox Status
+          </button>
+          <p class="mt-1 text-xs text-slate-500">{{ docker_status_message }}</p>
         </form>
 
         <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">

@@ -17,6 +17,7 @@ from grading_app.ast_checks import build_python_ast_profile, evaluate_ast_rule
 from grading_app.code_checks import run_regex_rules
 from grading_app.manifest import AssignmentManifest, ROOT, CodeExecutionSpec, QuestionSpec, StructureRule
 from grading_app.ai_evaluator import evaluate_with_ai, format_ai_error
+from grading_app.docker_sandbox import run_code_in_sandbox
 
 
 @dataclass
@@ -38,6 +39,8 @@ def _default_practice_checks(suffix: str) -> tuple[str, ...]:
     if suffix == ".sql":
         return ("comments", "no_select_star", "uses_aliases", "reasonable_length")
     if suffix in {".py"}:
+        return ("comments", "reasonable_length")
+    if suffix in {".java", ".cpp", ".cc", ".cxx"}:
         return ("comments", "reasonable_length")
     if suffix in {".xsl", ".xslt"}:
         return ("comments", "reasonable_length")
@@ -447,6 +450,67 @@ def _score_python_output_execution(
     return float(ratio), passed, 1, detail
 
 
+def _language_for_path(path: Path) -> str | None:
+    mapping = {
+        ".py": "python",
+        ".java": "java",
+        ".cpp": "cpp",
+        ".cc": "cpp",
+        ".cxx": "cpp",
+    }
+    return mapping.get(path.suffix.lower())
+
+
+def _score_docker_output_execution(
+    submitted: Path,
+    benchmark: Path | None,
+    execution: CodeExecutionSpec,
+) -> tuple[float, int, int, str]:
+    if benchmark is None:
+        return 0.0, 0, 1, "Docker output execution requires a benchmark file"
+
+    language = execution.language or _language_for_path(submitted)
+    if not language:
+        return 0.0, 0, 1, "Could not infer language for Docker execution"
+
+    if _language_for_path(benchmark) != language:
+        return 0.0, 0, 1, "Benchmark language does not match submitted file language"
+
+    stdin_text = ""
+    if execution.input_path:
+        input_path = _resolve_fixture_path(execution.input_path)
+        if not input_path.exists():
+            return 0.0, 0, 1, f"Docker input fixture missing: {execution.input_path}"
+        stdin_text = input_path.read_text(encoding="utf-8", errors="ignore")
+
+    benchmark_code = benchmark.read_text(encoding="utf-8", errors="ignore")
+    student_code = submitted.read_text(encoding="utf-8", errors="ignore")
+    expected = run_code_in_sandbox(
+        code=benchmark_code,
+        language=language,
+        stdin_text=stdin_text,
+        timeout_seconds=execution.timeout_seconds,
+        image_override=execution.image,
+    )
+    if not expected.ok:
+        return 0.0, 0, 1, f"Benchmark docker execution failed: {expected.output}"
+
+    actual = run_code_in_sandbox(
+        code=student_code,
+        language=language,
+        stdin_text=stdin_text,
+        timeout_seconds=execution.timeout_seconds,
+        image_override=execution.image,
+    )
+    if not actual.ok:
+        return 0.0, 0, 1, f"Student docker execution failed: {actual.output}"
+
+    ratio = difflib.SequenceMatcher(None, actual.output.strip(), expected.output.strip()).ratio()
+    passed = 1 if ratio >= 0.9999 else 0
+    detail = f"Docker output compared ({ratio * 100:.1f}% similarity) via {language}"
+    return float(ratio), passed, 1, detail
+
+
 def grade_semantic_code(
     submitted: Path,
     question: QuestionSpec,
@@ -471,6 +535,10 @@ def grade_semantic_code(
             )
         elif submitted.suffix.lower() == ".py" and execution and execution.engine == "python":
             correctness, correctness_passed, correctness_total, correctness_details = _score_python_output_execution(
+                submitted, benchmark, execution
+            )
+        elif execution and execution.engine == "docker":
+            correctness, correctness_passed, correctness_total, correctness_details = _score_docker_output_execution(
                 submitted, benchmark, execution
             )
         else:

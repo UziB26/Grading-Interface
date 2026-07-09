@@ -33,6 +33,7 @@ from grading_app.grader import (  # noqa: E402
     seed_benchmarks as copy_solution_benchmarks,
     write_reports,
 )
+from grading_app.docker_sandbox import get_docker_status  # noqa: E402
 from grading_app.upload_security import UploadValidationError  # noqa: E402
 
 app = Flask(__name__)
@@ -244,6 +245,7 @@ def index():
         }
         for question in manifest.questions
     ]
+    docker_status = get_docker_status()
 
     return render_template(
         "index.html",
@@ -266,6 +268,8 @@ def index():
         active_manifest_rel=active_manifest_rel,
         manifest_details=manifest_details,
         grading_engine_version=GRADING_ENGINE_VERSION,
+        docker_available=docker_status.available,
+        docker_status_message=docker_status.message,
     )
 
 
@@ -417,6 +421,14 @@ def grade():
     summaries = build_student_summaries(results, code_checks)
     write_reports(results, summaries, code_checks)
     flash(f"Graded {len(summaries)} student(s); {len(results)} file comparison(s) recorded.")
+    return redirect(url_for("index"))
+
+
+@app.post("/health/docker")
+def health_docker():
+    status = get_docker_status()
+    label = "available" if status.available else "unavailable"
+    flash(f"Docker sandbox status: {label}. {status.message}")
     return redirect(url_for("index"))
 
 

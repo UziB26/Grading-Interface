@@ -4,6 +4,7 @@ Manifest-driven grading platform for marking student submissions against benchma
 
 For operator workflow and UI usage, see `GRADING_INTERFACE_GUIDE.md`.
 For scoring internals and formulas, see `MARKING_MODES_DETAILED.md`.
+For Docker sandbox setup and troubleshooting, see `DOCKER_SANDBOX_SETUP.md`.
 
 ## What is implemented
 
@@ -12,6 +13,7 @@ For scoring internals and formulas, see `MARKING_MODES_DETAILED.md`.
 - Execution-based correctness for SQL (`sqlite`) and XSLT (`xslt`)
 - Gemini-powered semantic text grading (`semantic_text`) with safe fallback
 - Gemini-powered code practice (`ai` / `hybrid`) with safe fallback to rules
+- Optional Docker sandbox execution for Python/Java/C++ correctness checks
 - Per-file mark splitting for multi-file questions
 - UI breakdowns: marking mode, correctness mode, practice mode, correctness %, practice %
 
@@ -34,6 +36,7 @@ pip install -r requirements.txt
 - `google-genai`
 - `python-dotenv`
 - `pydantic`
+- `docker` (for optional container sandbox execution)
 
 ## Run the app
 
@@ -104,7 +107,7 @@ Defaults:
 
 Correctness methods:
 - `behavior_rules`
-- `output_execution` (SQL/XSLT/Python)
+- `output_execution` (SQL/XSLT/Python/local or Docker sandbox)
 
 Practice methods:
 - `rules`
@@ -175,6 +178,32 @@ Written to manifest `reports_dir`:
 - If a key is ever exposed, revoke and rotate immediately
 - Uploads and zip extraction are validated for unsafe content/paths
 - Python student code is not executed for AST correctness checks
+- Docker sandbox execution requires Docker Desktop running on host
+- Docker execution is network-disabled and runs in disposable containers with resource limits
+
+## Docker sandbox execution
+
+Use this when you want to execute untrusted Python/Java/C++ student code in isolated containers.
+
+Example `code_marking.correctness.execution`:
+
+```json
+{
+  "method": "output_execution",
+  "execution": {
+    "engine": "docker",
+    "language": "python",
+    "image": "python:3.10-alpine",
+    "timeout_seconds": 8,
+    "input_path": "test_uploads/python_exec_demo/fixtures/stdin.txt"
+  }
+}
+```
+
+Notes:
+- `language` supports `python`, `java`, `cpp`
+- If `language` is omitted, it is inferred from file suffix (`.py`, `.java`, `.cpp/.cc/.cxx`)
+- If Docker is unavailable, grading returns a clear execution error and does not crash the app
 
 ## Troubleshooting
 
